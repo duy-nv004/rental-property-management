@@ -1,5 +1,5 @@
 import { Menu } from 'antd';
-import { LayoutDashboard, Building2, Users, Package, BarChart3, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Package, FileText, MessageSquare, LogOut } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const AdminSidebar = () => {
@@ -8,8 +8,10 @@ const AdminSidebar = () => {
 
   const menuItems = [
     { key: '/admin/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-    { key: '/admin/landlords', icon: <Users size={18} />, label: 'Landlords' },
+    { key: '/admin/landlords', icon: <Users size={18} />, label: 'Quản lý Chủ nhà' },
     { key: '/admin/packages', icon: <Package size={18} />, label: 'Cấu hình Gói cước' },
+    { key: '/admin/logs', icon: <FileText size={18} />, label: 'Nhật ký hoạt động' },
+    { key: '/admin/tickets', icon: <MessageSquare size={18} />, label: 'Quản lý Ticket' },
   ];
 
   return (

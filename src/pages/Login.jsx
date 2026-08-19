@@ -9,6 +9,27 @@ const Login = () => {
   const [tenantModalVisible, setTenantModalVisible] = useState(false);
   const [telegramLink, setTelegramLink] = useState('');
   const navigate = useNavigate();
+  const [appealModalVisible, setAppealModalVisible] = useState(false);
+  const [appealLoading, setAppealLoading] = useState(false);
+
+  const onAppealFinish = async (values) => {
+    setAppealLoading(true);
+    try {
+      const response = await axiosInstance.post('/auth/appeal', {
+        email: values.email,
+        title: values.title,
+        message: values.message
+      });
+      message.success(response.message || "Gửi khiếu nại thành công!");
+      setAppealModalVisible(false);
+    } catch (error) {
+      console.error('Appeal Error:', error);
+      const errMsg = error.response?.data?.message || 'Không thể gửi khiếu nại. Vui lòng kiểm tra email của bạn!';
+      message.error(errMsg);
+    } finally {
+      setAppealLoading(false);
+    }
+  };
 
   const onFinish = async (values) => {
     setLoading(true);
@@ -25,6 +46,15 @@ const Login = () => {
         localStorage.setItem('accessToken', response.token);
         localStorage.setItem('role', response.role);
         localStorage.setItem('username', response.name || 'Người dùng');
+        localStorage.setItem('user', JSON.stringify({
+          id: response.id,
+          name: response.name,
+          email: response.email,
+          phone: response.phone,
+          role: response.role,
+          plan: response.plan || 'free',
+          planExpiresAt: response.planExpiresAt || null
+        }));
 
         message.success(`Chào mừng trở lại, ${response.name || 'Người dùng'}!`);
 
@@ -166,7 +196,13 @@ const Login = () => {
                 />
               </Form.Item>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+                <span 
+                  onClick={() => setAppealModalVisible(true)} 
+                  style={{ color: '#f5222d', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}
+                >
+                  Tài khoản bị khóa?
+                </span>
                 <span style={{ color: '#6366f1', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>
                   Quên mật khẩu?
                 </span>
@@ -242,6 +278,65 @@ const Login = () => {
         <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.6', padding: '10px 0' }}>
           Chào bạn! Để nhận thông báo hóa đơn tiền phòng hàng tháng kèm mã QR chuyển khoản trực tiếp qua Telegram, vui lòng nhấn kết nối với Bot Telegram của chúng tôi.
         </div>
+      </Modal>
+
+      {/* Modal gửi khiếu nại tài khoản bị khóa */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a', fontSize: '18px', fontWeight: '700' }}>
+            Yêu cầu khiếu nại tài khoản bị khóa
+          </div>
+        }
+        open={appealModalVisible}
+        onCancel={() => setAppealModalVisible(false)}
+        footer={null}
+        width={450}
+        centered
+      >
+        <Form
+          layout="vertical"
+          onFinish={onAppealFinish}
+          requiredMark={false}
+          size="middle"
+          style={{ marginTop: '16px' }}
+        >
+          <Form.Item
+            name="email"
+            label="Email tài khoản bị khóa"
+            rules={[
+              { required: true, message: 'Vui lòng nhập email!' },
+              { type: 'email', message: 'Email không đúng định dạng!' }
+            ]}
+          >
+            <Input placeholder="nhapemailcuaban@gmail.com" />
+          </Form.Item>
+
+          <Form.Item
+            name="title"
+            label="Tiêu đề khiếu nại"
+            rules={[{ required: true, message: 'Vui lòng nhập tiêu đề!' }]}
+            initialValue="Yêu cầu mở khóa tài khoản chủ nhà"
+          >
+            <Input placeholder="Ví dụ: Khiếu nại khóa nhầm tài khoản" />
+          </Form.Item>
+
+          <Form.Item
+            name="message"
+            label="Lý do & Nội dung khiếu nại"
+            rules={[{ required: true, message: 'Vui lòng nhập lý do khiếu nại!' }]}
+          >
+            <Input.TextArea rows={4} placeholder="Vui lòng cung cấp lý do chi tiết hoặc thông tin để ban quản trị đối soát mở khóa tài khoản..." />
+          </Form.Item>
+
+          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+            <Button onClick={() => setAppealModalVisible(false)} style={{ marginRight: '8px', borderRadius: '6px' }}>
+              Hủy
+            </Button>
+            <Button type="primary" htmlType="submit" loading={appealLoading} style={{ background: '#f5222d', borderColor: '#f5222d', borderRadius: '6px' }}>
+              Gửi Khiếu Nại
+            </Button>
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* CSS phụ trợ cho Responsive */}

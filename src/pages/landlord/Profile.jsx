@@ -69,7 +69,7 @@ const LandlordProfile = () => {
     setPasswordLoading(true);
     try {
       await axiosInstance.put('/auth/change-password', {
-        oldPassword: values.oldPassword,
+        currentPassword: values.oldPassword,
         newPassword: values.newPassword
       });
       message.success('Đổi mật khẩu thành công!');

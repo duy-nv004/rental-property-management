@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Table, Select, InputNumber, Button, Space, message, Modal, Tag, Alert, Card, Upload, Tooltip } from 'antd';
-import { Zap, Droplets, Calculator, CheckCircle2, Landmark, HelpCircle, Save, Camera } from 'lucide-react';
+import { Calculator, CheckCircle2, Save, Camera, ArrowRight } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 
 const UtilityManagement = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [buildings, setBuildings] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -50,7 +52,7 @@ const UtilityManagement = () => {
     if (!roomReadings || roomReadings.length === 0) return 0;
     const filtered = roomReadings
       .filter(r => r.type === type)
-      .sort((a, b) => new Date(b.readingDate || b.createdAt) - new Date(a.readingDate || a.createdAt));
+      .sort((a, b) => (b.id || 0) - (a.id || 0) || new Date(b.createdAt || b.readingDate) - new Date(a.createdAt || a.readingDate));
     return filtered.length > 0 ? filtered[0].readingValue : 0;
   };
 
@@ -430,11 +432,23 @@ const UtilityManagement = () => {
         open={qrModalVisible}
         onCancel={() => setQrModalVisible(false)}
         footer={[
-          <Button key="close" type="primary" onClick={() => setQrModalVisible(false)} style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }}>
-            Hoàn thành
+          <Button 
+            key="financials" 
+            type="default" 
+            icon={<ArrowRight size={14} />} 
+            onClick={() => {
+              setQrModalVisible(false);
+              navigate('/landlord/financials');
+            }} 
+            style={{ borderRadius: '8px', fontWeight: 'bold' }}
+          >
+            Thống kê Doanh thu
+          </Button>,
+          <Button key="close" type="primary" onClick={() => setQrModalVisible(false)} style={{ background: '#1a3353', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>
+            Đóng
           </Button>
         ]}
-        width={400}
+        width={420}
         centered
       >
         {invoiceResult && (
@@ -447,14 +461,14 @@ const UtilityManagement = () => {
             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
               <img 
                 src={invoiceResult.qrCode} 
-                alt="VietQR Code" 
-                style={{ width: '200px', height: '200px', display: 'block', borderRadius: '8px' }}
+                alt="SePay VietQR Code" 
+                style={{ width: '220px', height: '220px', display: 'block', borderRadius: '8px' }}
               />
             </div>
             
             <Alert 
-              message="Đã đồng bộ Telegram"
-              description="Thông báo hóa đơn chi tiết cùng mã VietQR chuyển khoản ngân hàng đã được gửi trực tiếp tới máy điện thoại khách thuê."
+              message="Đã gửi Telegram & Tích hợp SePay tự động"
+              description="Thông báo kèm mã VietQR đã được gửi tới khách thuê. Khi khách quét QR thanh toán, SePay sẽ tự động gạch nợ hóa đơn và cập nhật doanh thu cho bạn."
               type="success"
               showIcon
               style={{ borderRadius: '8px', width: '100%' }}

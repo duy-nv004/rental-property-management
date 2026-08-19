@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Card, InputNumber, Button, Switch, Tag, Form, Radio, message, Spin, Space } from 'antd';
-import { ShieldCheck, Cpu, ArrowUpRight, Save } from 'lucide-react';
+import { Row, Col, Card, InputNumber, Button, Form, Radio, message, Spin, Tag } from 'antd';
+import { ShieldCheck, Cpu, Save } from 'lucide-react';
+import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
 
 const PackageCard = ({ plan, onSave }) => {
@@ -17,6 +18,7 @@ const PackageCard = ({ plan, onSave }) => {
       maxAICallsPerMonth: plan.maxAICallsPerMonth === -1 ? 30 : plan.maxAICallsPerMonth
     });
     setAiLimitType(plan.maxAICallsPerMonth === -1 ? 'unlimited' : 'limited');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan]);
 
   const handleSubmit = async (values) => {
@@ -162,6 +164,19 @@ const PackageCard = ({ plan, onSave }) => {
       </Form>
     </Card>
   );
+};
+
+PackageCard.propTypes = {
+  plan: PropTypes.shape({
+    id: PropTypes.number,
+    name: PropTypes.string,
+    price: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    annualPrice: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    maxBuildings: PropTypes.number,
+    maxRoomsPerBuilding: PropTypes.number,
+    maxAICallsPerMonth: PropTypes.number,
+  }),
+  onSave: PropTypes.func,
 };
 
 const PackageSettings = () => {

@@ -1,5 +1,5 @@
 import { Table, Tag, Card, Button, Space, Modal, Form, Select, DatePicker, InputNumber, message, Popconfirm, Spin, Divider, Row, Col, Checkbox, Upload, Input } from 'antd';
-import { FileSignature, Plus, Trash2, ShieldCheck, AlertTriangle, Eye, UploadCloud, Printer } from 'lucide-react';
+import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 
 import { useState, useEffect } from 'react';
@@ -11,6 +11,11 @@ const ContractManager = () => {
   const [buildings, setBuildings] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
+  
+  // State tạo nhanh khách thuê trong modal hợp đồng
+  const [quickTenantModalVisible, setQuickTenantModalVisible] = useState(false);
+  const [quickTenantLoading, setQuickTenantLoading] = useState(false);
+  const [quickTenantForm] = Form.useForm();
   
   // State bật/tắt thiết lập đơn giá thỏa thuận riêng
   const [hasCustomPrices, setHasCustomPrices] = useState(false);
@@ -79,6 +84,38 @@ const ContractManager = () => {
       message.error(err.response?.data?.message || 'Có lỗi xảy ra khi phân tích ảnh CCCD.');
     } finally {
       setScanningCccd(false);
+    }
+  };
+
+  const handleQuickCreateTenant = async (values) => {
+    setQuickTenantLoading(true);
+    try {
+      const response = await axiosInstance.post('/auth/create-tenant', {
+        name: values.name,
+        phone: values.phone,
+        password: values.password || '123456'
+      });
+      message.success('Đã tạo tài khoản khách thuê mới thành công!');
+      quickTenantForm.resetFields();
+      setQuickTenantModalVisible(false);
+      
+      // Refresh danh sách khách thuê và tự động chọn khách mới tạo vào form Hợp đồng
+      const freshTenants = await axiosInstance.get('/manage/tenants');
+      setTenants(freshTenants);
+      
+      const createdId = response.user?.id || freshTenants.find(t => t.phone === values.phone)?.id;
+      if (createdId) {
+        form.setFieldsValue({
+          tenantId: createdId,
+          tenantName: values.name,
+          tenantPhone: values.phone
+        });
+      }
+    } catch (err) {
+      console.error('Error creating quick tenant:', err);
+      message.error(err.response?.data?.message || 'Có lỗi xảy ra khi tạo tài khoản khách thuê.');
+    } finally {
+      setQuickTenantLoading(false);
     }
   };
 
@@ -462,7 +499,23 @@ const ContractManager = () => {
             <Col span={8}>
               <Form.Item
                 name="tenantId"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Chọn tài khoản liên kết</span>}
+                label={
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span style={{ fontWeight: '600', fontSize: '13px' }}>Chọn tài khoản liên kết</span>
+                    <Button 
+                      type="link" 
+                      size="small" 
+                      icon={<UserPlus size={12} />} 
+                      style={{ padding: 0, height: 'auto', fontSize: '11px', color: '#10b981', fontWeight: 'bold' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuickTenantModalVisible(true);
+                      }}
+                    >
+                      + Tạo khách mới
+                    </Button>
+                  </div>
+                }
                 rules={[{ required: true, message: 'Chọn tài khoản liên kết khách thuê!' }]}
               >
                 <Select 
@@ -778,6 +831,65 @@ const ContractManager = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* MODAL TẠO NHANH TÀI KHOẢN KHÁCH THUÊ */}
+      <Modal
+        title={<span style={{ fontWeight: '800', fontSize: '17px', color: '#1a3353' }}><UserPlus size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Tạo nhanh tài khoản khách thuê mới</span>}
+        open={quickTenantModalVisible}
+        onCancel={() => setQuickTenantModalVisible(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setQuickTenantModalVisible(false)} style={{ borderRadius: '8px' }}>
+            Hủy
+          </Button>,
+          <Button 
+            key="submit" 
+            type="primary" 
+            loading={quickTenantLoading} 
+            style={{ background: '#10b981', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+            onClick={() => quickTenantForm.submit()}
+          >
+            Tạo & Chọn khách này
+          </Button>
+        ]}
+        width={420}
+        centered
+      >
+        <Form
+          form={quickTenantForm}
+          layout="vertical"
+          onFinish={handleQuickCreateTenant}
+          requiredMark={false}
+          initialValues={{ password: '123456' }}
+          style={{ marginTop: '12px' }}
+        >
+          <Form.Item
+            name="name"
+            label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Họ và tên khách thuê</span>}
+            rules={[{ required: true, message: 'Vui lòng nhập họ tên khách thuê!' }]}
+          >
+            <Input placeholder="Ví dụ: Nguyễn Văn A" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+          </Form.Item>
+
+          <Form.Item
+            name="phone"
+            label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số điện thoại (tên đăng nhập)</span>}
+            rules={[
+              { required: true, message: 'Vui lòng nhập số điện thoại!' },
+              { pattern: /^[0-9]{10}$/, message: 'Số điện thoại gồm 10 chữ số!' }
+            ]}
+          >
+            <Input placeholder="Ví dụ: 0987654321" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+          </Form.Item>
+
+          <Form.Item
+            name="password"
+            label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Mật khẩu đăng nhập ban đầu</span>}
+            rules={[{ required: true, message: 'Nhập mật khẩu!' }]}
+          >
+            <Input.Password placeholder="Mặc định: 123456" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

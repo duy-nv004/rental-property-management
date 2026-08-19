@@ -9,6 +9,8 @@ import TenantLayout from '../layouts/TenantLayout';
 import AdminDashboard from '../pages/admin/Dashboard';
 import LandlordList from '../pages/admin/LandlordList';
 import PackageSettings from '../pages/admin/PackageSettings';
+import ActivityLogs from '../pages/admin/ActivityLogs';
+import TicketManager from '../pages/admin/TicketManager';
 
 // Pages - Landlord
 import LandlordDashboard from '../pages/landlord/Dashboard'; // Trang Dashboard của chủ nhà
@@ -42,6 +44,8 @@ const ThemeRoutes = () => {
         { path: 'dashboard', element: <AdminDashboard /> },
         { path: 'landlords', element: <LandlordList /> },
         { path: 'packages', element: <PackageSettings /> },
+        { path: 'logs', element: <ActivityLogs /> },
+        { path: 'tickets', element: <TicketManager /> },
         { path: '', element: <Navigate to="dashboard" /> },
       ],
     },
