@@ -1,10 +1,12 @@
 import { Table, Tag, Card, Button, Space, Modal, Form, Select, DatePicker, InputNumber, message, Popconfirm, Spin, Divider, Row, Col, Checkbox, Upload, Input } from 'antd';
 import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import axiosInstance from '../../utils/axios';
 
 import { useState, useEffect } from 'react';
 
 const ContractManager = () => {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [contracts, setContracts] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -30,8 +32,6 @@ const ContractManager = () => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [form] = Form.useForm();
 
-
-
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -56,6 +56,20 @@ const ContractManager = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (location.state?.createForRoomId && buildings.length > 0) {
+      const targetRoomId = location.state.createForRoomId;
+      const targetBuildingId = location.state.buildingId;
+      
+      form.setFieldsValue({
+        buildingId: targetBuildingId,
+        roomId: targetRoomId
+      });
+      setSelectedBuildingId(targetBuildingId);
+      setModalVisible(true);
+    }
+  }, [location.state, buildings]);
 
   // Xử lý Upload và Quét CCCD bằng AI
   const handleCccdUpload = async (file) => {

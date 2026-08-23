@@ -111,9 +111,9 @@ const Plans = () => {
           planName: 'free',
           billingCycle: 'monthly'
         });
-        message.success("Đã chuyển về Gói Miễn Phí thành công!");
+        message.success(response.message || "Đã chuyển về Gói Miễn Phí thành công!");
         
-        const updatedUser = { ...user, plan: 'free', planExpiresAt: null };
+        const updatedUser = { ...user, ...(response.user || {}), plan: 'free', planExpiresAt: null };
         localStorage.setItem('user', JSON.stringify(updatedUser));
         setUserProfile(response.user || updatedUser);
         
@@ -121,7 +121,7 @@ const Plans = () => {
         fetchPlans();
       } catch (err) {
         console.error(err);
-        message.error("Không thể hạ cấp xuống gói Miễn phí.");
+        message.error(err.response?.data?.message || "Không thể hạ cấp xuống gói Miễn phí.");
       }
       return;
     }
@@ -132,8 +132,41 @@ const Plans = () => {
 
   const handleSelectPlan = (plan) => {
     const currentPlanName = (userProfile?.plan || user?.plan || 'free').toLowerCase();
+    const targetPlanName = plan.name.toLowerCase();
+
+    if (currentPlanName === targetPlanName && targetPlanName === 'free') {
+      message.info("Tài khoản của bạn đang ở Gói Miễn Phí.");
+      return;
+    }
+
+    const currentStatus = calculateExpiryStatus();
+
+    // Nếu chọn chuyển về gói Free từ bất kỳ gói nào khác
+    if (targetPlanName === 'free') {
+      Modal.confirm({
+        title: '⚠️ Xác nhận chuyển về Gói Miễn Phí',
+        icon: <AlertTriangle color="#ef4444" size={24} style={{ marginRight: '8px' }} />,
+        content: (
+          <div style={{ padding: '8px 0', fontSize: '13.5px', color: '#475569', lineHeight: '1.6' }}>
+            <p style={{ margin: '0 0 8px 0' }}>
+              Gói hiện tại <strong>{currentPlanName.toUpperCase()}</strong> ({currentStatus.daysLeftText}).
+            </p>
+            <p style={{ margin: 0, color: '#dc2626', fontWeight: '600' }}>
+              Khi chuyển về Gói Miễn Phí, tài khoản của bạn sẽ bị giảm hạn mức quản lý (tối đa 1 tòa nhà, 5 phòng) và tạm dừng các tính năng nâng cao (AI đọc số điện nước, báo cáo thông minh). Bạn có chắc chắn muốn chuyển không?
+            </p>
+          </div>
+        ),
+        okText: 'Xác nhận chuyển gói',
+        cancelText: 'Hủy bỏ',
+        okButtonProps: { danger: true, style: { borderRadius: '6px', fontWeight: 'bold' } },
+        cancelButtonProps: { style: { borderRadius: '6px' } },
+        onOk: () => executeChangePlan(plan)
+      });
+      return;
+    }
+
     const currentTier = PLAN_TIERS[currentPlanName] || 0;
-    const targetTier = PLAN_TIERS[plan.name.toLowerCase()] || 0;
+    const targetTier = PLAN_TIERS[targetPlanName] || 0;
 
     // Kiểm tra xem gói cũ có đang hoạt động và còn thời hạn hay không
     const expiresAt = userProfile?.planExpiresAt || user?.planExpiresAt;
@@ -147,7 +180,7 @@ const Plans = () => {
       isStillActive = expDate >= today;
     }
 
-    // Nếu lỡ tay bấm hạ cấp gói thấp hơn khi gói cũ vẫn còn hạn
+    // Nếu lỡ tay bấm hạ cấp gói thấp hơn khi gói cũ vẫn còn hạn (Ví dụ: Pro -> Basic)
     if (currentTier > targetTier && isStillActive && currentPlanName !== 'free') {
       Modal.confirm({
         title: '⚠️ Cảnh báo hạ cấp gói dịch vụ',

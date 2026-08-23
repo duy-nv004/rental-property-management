@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Table, Tag, Card, Button, Space, Modal, Form, Input, Select, InputNumber, message, Popconfirm, Spin } from 'antd';
-import { Home, Plus, Trash2, Edit2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Table, Tag, Card, Button, Space, Modal, Form, Input, Select, InputNumber, message, Popconfirm, Spin, Row, Col, Tooltip } from 'antd';
+import { Home, Plus, Trash2, Edit2, FileSignature, Zap, Users, Maximize2 } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 
 const RoomManager = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [rooms, setRooms] = useState([]);
   const [buildings, setBuildings] = useState([]);
@@ -38,6 +40,8 @@ const RoomManager = () => {
       await axiosInstance.post('/manage/rooms', {
         roomNumber: values.roomNumber,
         price: values.price,
+        capacity: values.capacity,
+        area: values.area,
         buildingId: values.buildingId
       });
       message.success('Đã thêm phòng trọ mới thành công!');
@@ -66,7 +70,7 @@ const RoomManager = () => {
   };
 
   const formatVND = (value) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
   };
 
   const columns = [
@@ -94,6 +98,18 @@ const RoomManager = () => {
       render: (price) => <b>{formatVND(price)}</b> 
     },
     { 
+      title: 'SỨC CHỨA', 
+      dataIndex: 'capacity', 
+      key: 'capacity',
+      render: (capacity) => <span><Users size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />{capacity || 2} người</span> 
+    },
+    { 
+      title: 'DIỆN TÍCH', 
+      dataIndex: 'area', 
+      key: 'area',
+      render: (area) => <span><Maximize2 size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />{area || 20} m²</span> 
+    },
+    { 
       title: 'TRẠNG THÁI', 
       dataIndex: 'status', 
       key: 'status',
@@ -110,10 +126,30 @@ const RoomManager = () => {
       title: 'HÀNH ĐỘNG',
       key: 'action',
       render: (_, record) => (
-        <Space size="middle">
+        <Space size="small">
+          {record.status === 'empty' && (
+            <Button
+              type="primary"
+              size="small"
+              icon={<FileSignature size={14} />}
+              style={{ background: '#10b981', borderColor: '#10b981', borderRadius: '6px' }}
+              onClick={() => navigate('/landlord/contracts', { state: { createForRoomId: record.id, buildingId: record.buildingId } })}
+            >
+              Tạo hợp đồng
+            </Button>
+          )}
+          <Button
+            type="default"
+            size="small"
+            icon={<Zap size={14} color="#d97706" />}
+            style={{ borderRadius: '6px', borderColor: '#fde047', background: '#fefce8', color: '#854d0e' }}
+            onClick={() => navigate('/landlord/utilities', { state: { selectedRoomId: record.id, buildingId: record.buildingId } })}
+          >
+            Chốt số điện
+          </Button>
           <Popconfirm
             title="Xóa phòng trọ"
-            description="Bạn có chắc chắn muốn xóa phòng trọ này không? Hợp đồng liên quan (nếu có) sẽ bị ảnh hưởng."
+            description="Bạn có chắc chắn muốn xóa phòng trọ này không?"
             okText="Xóa"
             cancelText="Hủy"
             onConfirm={() => handleDeleteRoom(record.id)}
@@ -182,7 +218,7 @@ const RoomManager = () => {
             Lưu lại
           </Button>
         ]}
-        width={400}
+        width={450}
         centered
       >
         <Form
@@ -225,6 +261,29 @@ const RoomManager = () => {
               placeholder="3,500,000"
             />
           </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="capacity"
+                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Sức chứa (Người)</span>}
+                rules={[{ required: true, message: 'Vui lòng nhập sức chứa!' }]}
+                initialValue={2}
+              >
+                <InputNumber min={1} max={50} style={{ width: '100%', borderRadius: '8px' }} placeholder="2" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="area"
+                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Diện tích (m²)</span>}
+                rules={[{ required: true, message: 'Vui lòng nhập diện tích!' }]}
+                initialValue={20}
+              >
+                <InputNumber min={1} style={{ width: '100%', borderRadius: '8px' }} placeholder="20" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
     </div>

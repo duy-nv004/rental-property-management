@@ -58,7 +58,7 @@ const ThemeRoutes = () => {
         { path: 'dashboard', element: <LandlordDashboard /> },
         { path: 'buildings', element: <BuildingManager /> },
         { path: 'tenants', element: <TenantManager /> },
-        { path: 'rooms', element: <RoomManager /> },
+        { path: 'rooms', element: <Navigate to="/landlord/buildings" replace /> },
         { path: 'utilities', element: <UtilityManagement /> }, // Phần điện nước
         { path: 'financials', element: <Financials /> },
         { path: 'contracts', element: <ContractManager /> },

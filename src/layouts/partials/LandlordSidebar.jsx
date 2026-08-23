@@ -12,7 +12,6 @@ const LandlordSidebar = ({ onClose }) => {
   const menuItems = [
     { key: '/landlord/dashboard', icon: <LayoutDashboard size={18} />, label: 'Tổng quan' },
     { key: '/landlord/buildings', icon: <Building size={18} />, label: 'Tòa nhà' },
-    { key: '/landlord/rooms', icon: <Home size={18} />, label: 'Phòng trọ' },
     { key: '/landlord/tenants', icon: <Users size={18} />, label: 'Khách thuê' },
     { key: '/landlord/contracts', icon: <FileSignature size={18} />, label: 'Hợp đồng' },
     { key: '/landlord/utilities', icon: <Landmark size={18} />, label: 'Chốt điện nước' },

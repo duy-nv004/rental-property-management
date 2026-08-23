@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Table, Select, InputNumber, Button, Space, message, Modal, Tag, Alert, Card, Upload, Tooltip } from 'antd';
 import { Calculator, CheckCircle2, Save, Camera, ArrowRight } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 
 const UtilityManagement = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [buildings, setBuildings] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -32,7 +33,9 @@ const UtilityManagement = () => {
       setBuildings(buildingsData);
       setRooms(roomsData);
       
-      if (buildingsData.length > 0) {
+      if (location.state?.buildingId) {
+        setSelectedBuildingId(location.state.buildingId);
+      } else if (buildingsData.length > 0) {
         setSelectedBuildingId(buildingsData[0].id);
       }
     } catch (err) {
@@ -45,7 +48,7 @@ const UtilityManagement = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [location.state]);
 
   // Lấy chỉ số đo lường cũ gần nhất của phòng
   const getLatestReading = (roomReadings, type) => {
