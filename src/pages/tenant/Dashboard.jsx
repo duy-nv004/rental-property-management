@@ -38,8 +38,8 @@ const TenantDashboard = () => {
     );
   }
 
-  // Trường hợp người thuê chưa được gán phòng
-  if (!data || !data.hasActiveContract) {
+  // Trường hợp người thuê chưa có cả hợp đồng active lẫn hợp đồng chờ ký
+  if (!data || (!data.hasActiveContract && !data.hasPendingContract)) {
     return (
       <div style={{ maxWidth: '600px', margin: '40px auto', padding: '0 16px' }}>
         <Card bordered={false} style={{ textAlign: 'center', borderRadius: '16px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
@@ -110,6 +110,23 @@ const TenantDashboard = () => {
           Địa chỉ: {building.address}
         </p>
       </div>
+
+      {/* Pending Contract Alert */}
+      {data.hasPendingContract && (
+        <Alert
+          message="BẠN CÓ HỢP ĐỒNG THUÊ PHÒNG CHỜ KÝ NHẬN"
+          description="Chủ nhà đã khởi tạo hợp đồng thuê và đính kèm chữ ký điện tử. Vui lòng đọc kỹ các điều khoản và thực hiện Ký số để kích hoạt hợp đồng."
+          type="warning"
+          showIcon
+          icon={<FileText size={20} color="#d97706" />}
+          action={
+            <Button size="middle" type="primary" style={{ background: '#d97706', border: 'none', fontWeight: 'bold', borderRadius: '8px' }} onClick={() => navigate('/tenant/contract')}>
+              Ký hợp đồng ngay
+            </Button>
+          }
+          style={{ marginBottom: '24px', borderRadius: '12px', background: '#fffbeb', border: '1px solid #fde68a' }}
+        />
+      )}
 
       {/* Telegram Connection Alert if not connected */}
       {!profile.telegramChatId && (

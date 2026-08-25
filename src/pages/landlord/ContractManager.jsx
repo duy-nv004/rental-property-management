@@ -1,9 +1,10 @@
 import { Table, Tag, Card, Button, Space, Modal, Form, Select, DatePicker, InputNumber, message, Popconfirm, Spin, Divider, Row, Col, Checkbox, Upload, Input } from 'antd';
-import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus } from 'lucide-react';
+import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus, RotateCcw, Trash2, CheckCircle2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import axiosInstance from '../../utils/axios';
 
 import { useState, useEffect } from 'react';
+import SignaturePadModal from '../../components/common/SignaturePadModal';
 
 const ContractManager = () => {
   const location = useLocation();
@@ -31,6 +32,19 @@ const ContractManager = () => {
   const [selectedContract, setSelectedContract] = useState(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [form] = Form.useForm();
+
+  // State Ký số Chủ nhà (Bên A)
+  const [signatureModalVisible, setSignatureModalVisible] = useState(false);
+  const [landlordSignature, setLandlordSignature] = useState(null);
+
+  // State Danh sách đồ dùng bàn giao động
+  const [inventoryList, setInventoryList] = useState([
+    { name: 'Giường ngủ', quantity: 1, status: 'Bình thường' },
+    { name: 'Tủ quần áo', quantity: 1, status: 'Bình thường' },
+    { name: 'Điều hòa + điều khiển', quantity: 1, status: 'Bình thường' },
+    { name: 'Bình nóng lạnh', quantity: 1, status: 'Bình thường' },
+    { name: 'Bàn bếp + bồn rửa', quantity: 1, status: 'Bình thường' }
+  ]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -62,20 +76,80 @@ const ContractManager = () => {
       const targetRoomId = location.state.createForRoomId;
       const targetBuildingId = location.state.buildingId;
       
-      form.setFieldsValue({
-        buildingId: targetBuildingId,
-        roomId: targetRoomId
-      });
-      setSelectedBuildingId(targetBuildingId);
-      setModalVisible(true);
+      handleOpenCreateModal(targetBuildingId, targetRoomId);
     }
   }, [location.state, buildings]);
 
-  // Xử lý Upload và Quét CCCD bằng AI
-  const handleCccdUpload = async (file) => {
+  // Nạp thông tin mặc định của Chủ nhà từ Hồ sơ
+  const handleFillDefaultLandlordInfo = () => {
+    const landlordInfo = JSON.parse(localStorage.getItem('user')) || {};
+    const chosenBuilding = buildings.find(b => b.id === form.getFieldValue('buildingId'));
+    const landlordAddress = chosenBuilding ? (chosenBuilding.address || chosenBuilding.name) : (landlordInfo.address || '');
+
+    form.setFieldsValue({
+      landlordName: landlordInfo.name || '',
+      landlordPhone: landlordInfo.phone || '',
+      landlordCccd: landlordInfo.cccd || '',
+      landlordDob: landlordInfo.dob || '',
+      landlordHometown: landlordInfo.hometown || '',
+      landlordAddress: landlordAddress
+    });
+    message.info('Đã nạp thông tin mặc định của Chủ nhà từ Hồ sơ tài khoản.');
+  };
+
+  // Mở Modal Tạo hợp đồng mới
+  const handleOpenCreateModal = (buildingId = null, roomId = null) => {
+    setHasCustomPrices(false);
+    form.resetFields();
+    
+    const landlordInfo = JSON.parse(localStorage.getItem('user')) || {};
+    const initialBuildingId = buildingId || (buildings.length > 0 ? buildings[0].id : undefined);
+    const chosenBuilding = buildings.find(b => b.id === initialBuildingId);
+    const landlordAddress = chosenBuilding ? (chosenBuilding.address || chosenBuilding.name) : '';
+
+    setSelectedBuildingId(initialBuildingId);
+    form.setFieldsValue({
+      buildingId: initialBuildingId,
+      roomId: roomId,
+      landlordName: landlordInfo.name || '',
+      landlordPhone: landlordInfo.phone || '',
+      landlordCccd: landlordInfo.cccd || '',
+      landlordDob: landlordInfo.dob || '',
+      landlordHometown: landlordInfo.hometown || '',
+      landlordAddress: landlordAddress,
+      electricityPrice: chosenBuilding?.service ? parseFloat(chosenBuilding.service.electricityPrice) : 3500,
+      waterPrice: chosenBuilding?.service ? parseFloat(chosenBuilding.service.waterPrice) : 20000,
+      internetPrice: chosenBuilding?.service ? parseFloat(chosenBuilding.service.internetPrice) : 100000,
+      cleaningPrice: chosenBuilding?.service ? parseFloat(chosenBuilding.service.cleaningPrice) : 50000,
+      numTenants: 1,
+      paymentDay: 30,
+      initialElectricity: 0,
+      initialWater: 0
+    });
+
+    setInventoryList([
+      { name: 'Giường ngủ', quantity: 1, status: 'Bình thường' },
+      { name: 'Tủ quần áo', quantity: 1, status: 'Bình thường' },
+      { name: 'Điều hòa + điều khiển', quantity: 1, status: 'Bình thường' },
+      { name: 'Bình nóng lạnh', quantity: 1, status: 'Bình thường' },
+      { name: 'Bàn bếp + bồn rửa', quantity: 1, status: 'Bình thường' }
+    ]);
+    setLandlordSignature(null);
+    setModalVisible(true);
+  };
+
+  // Quét 1 hoặc 2 mặt CCCD bằng AI
+  const handleCccdUpload = async (fileOrList) => {
     setScanningCccd(true);
     const formData = new FormData();
-    formData.append('cccdImage', file);
+    if (Array.isArray(fileOrList)) {
+      fileOrList.forEach(file => {
+        formData.append('cccdImages', file.originFileObj || file);
+      });
+    } else if (fileOrList) {
+      formData.append('cccdImages', fileOrList.originFileObj || fileOrList);
+    }
+
     try {
       const response = await axiosInstance.post('/ai/scan-cccd', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -84,12 +158,12 @@ const ContractManager = () => {
       if (ocrResult && ocrResult.data) {
         const { name, dob, cccdNumber, hometown } = ocrResult.data;
         form.setFieldsValue({
-          tenantName: name || '',
-          tenantCccd: cccdNumber || '',
-          tenantDob: dob || '',
-          tenantHometown: hometown || ''
+          tenantName: name || form.getFieldValue('tenantName') || '',
+          tenantCccd: cccdNumber || form.getFieldValue('tenantCccd') || '',
+          tenantDob: dob || form.getFieldValue('tenantDob') || '',
+          tenantHometown: hometown || form.getFieldValue('tenantHometown') || ''
         });
-        message.success('AI quét và điền thông tin Căn cước công dân thành công!');
+        message.success('AI quét trích xuất thông tin Căn cước công dân thành công!');
       } else {
         message.warning('AI không tìm thấy thông tin phù hợp, vui lòng nhập thủ công.');
       }
@@ -113,7 +187,6 @@ const ContractManager = () => {
       quickTenantForm.resetFields();
       setQuickTenantModalVisible(false);
       
-      // Refresh danh sách khách thuê và tự động chọn khách mới tạo vào form Hợp đồng
       const freshTenants = await axiosInstance.get('/manage/tenants');
       setTenants(freshTenants);
       
@@ -134,6 +207,11 @@ const ContractManager = () => {
   };
 
   const handleCreateContract = async (values) => {
+    if (!landlordSignature) {
+      message.error('Vui lòng thực hiện vẽ chữ ký đại diện Bên A (Chủ nhà) trước khi bấm Tạo hợp đồng!');
+      return;
+    }
+
     setSubmitLoading(true);
     try {
       let finalPrices = {};
@@ -160,19 +238,6 @@ const ContractManager = () => {
         };
       }
 
-      // Chuẩn bị danh sách đồ dùng bàn giao mặc định (luôn là đầy đủ và bình thường)
-      const defaultInventory = [
-        { name: 'Giường', quantity: 1, status: 'Bình thường' },
-        { name: 'Tủ quần áo', quantity: 1, status: 'Bình thường' },
-        { name: 'Điều hòa + điều khiển', quantity: 1, status: 'Bình thường' },
-        { name: 'Bình nóng lạnh', quantity: 1, status: 'Bình thường' },
-        { name: 'Bàn bếp + bồn rửa', quantity: 1, status: 'Bình thường' }
-      ];
-
-      const landlordInfo = JSON.parse(localStorage.getItem('user')) || {};
-      const chosenBuilding = buildings.find(b => b.id === values.buildingId);
-      const landlordAddress = chosenBuilding ? (chosenBuilding.address || chosenBuilding.name) : '';
-
       await axiosInstance.post('/contracts/create', {
         tenantId: values.tenantId,
         roomId: values.roomId,
@@ -182,15 +247,17 @@ const ContractManager = () => {
         initialElectricity: values.initialElectricity,
         initialWater: values.initialWater,
 
-        // Thông tin Bên A (Tự động nạp nền)
-        landlordName: landlordInfo.name || '',
-        landlordPhone: landlordInfo.phone || '',
-        landlordCccd: landlordInfo.cccd || '',
-        landlordDob: landlordInfo.dob || '',
-        landlordHometown: landlordInfo.hometown || '',
-        landlordAddress: landlordAddress,
+        // Thông tin Bên A (Nhận tay hoặc tự động)
+        landlordName: values.landlordName,
+        landlordPhone: values.landlordPhone,
+        landlordCccd: values.landlordCccd,
+        landlordDob: values.landlordDob,
+        landlordHometown: values.landlordHometown,
+        landlordAddress: values.landlordAddress,
+        landlordSignature: landlordSignature,
 
         // Thông tin Bên B
+        tenantName: values.tenantName,
         tenantCccd: values.tenantCccd,
         tenantDob: values.tenantDob,
         tenantHometown: values.tenantHometown,
@@ -198,12 +265,13 @@ const ContractManager = () => {
         
         numTenants: values.numTenants || 1,
         paymentDay: values.paymentDay || 30,
-        inventory: defaultInventory,
+        inventory: inventoryList,
         
         ...finalPrices
       });
-      message.success('Thiết lập hợp đồng thuê trọ mới thành công!');
+      message.success('Khởi tạo hợp đồng thuê thành công! Hợp đồng đang chờ khách thuê đăng nhập ký xác nhận.');
       form.resetFields();
+      setLandlordSignature(null);
       setModalVisible(false);
       fetchData();
     } catch (err) {
@@ -223,6 +291,18 @@ const ContractManager = () => {
     } catch (err) {
       console.error('Error terminating contract:', err);
       const errMsg = err.response?.data?.message || 'Không thể thanh lý hợp đồng.';
+      message.error(errMsg);
+    }
+  };
+
+  const handleCancelContract = async (id) => {
+    try {
+      const response = await axiosInstance.put(`/contracts/${id}/cancel`);
+      message.success(response.message || 'Hủy hợp đồng chờ thành công!');
+      fetchData();
+    } catch (err) {
+      console.error('Error cancelling contract:', err);
+      const errMsg = err.response?.data?.message || 'Không thể hủy hợp đồng.';
       message.error(errMsg);
     }
   };
@@ -281,7 +361,10 @@ const ContractManager = () => {
         let color = 'default';
         let text = status;
         if (status === 'active') { color = 'green'; text = 'Đang hoạt động'; }
-        else if (status === 'terminated') { color = 'orange'; text = 'Đã thanh lý'; }
+        else if (status === 'pending_tenant_signature') { color = 'orange'; text = 'Chờ khách ký'; }
+        else if (status === 'rejected') { color = 'red'; text = 'Bị từ chối'; }
+        else if (status === 'cancelled') { color = 'default'; text = 'Đã hủy'; }
+        else if (status === 'terminated') { color = 'gray'; text = 'Đã thanh lý'; }
         else if (status === 'expired') { color = 'red'; text = 'Hết hạn'; }
         return <Tag color={color} style={{ fontWeight: 'bold' }}>{text}</Tag>;
       }
@@ -303,6 +386,19 @@ const ContractManager = () => {
           >
             Xem HĐ
           </Button>
+          {record.status === 'pending_tenant_signature' && (
+            <Popconfirm
+              title="Hủy hợp đồng chờ"
+              description="Hành động này sẽ hủy hợp đồng đang chờ khách ký và giải phóng phòng về Trống. Bạn chắc chắn chứ?"
+              okText="Xác nhận"
+              cancelText="Hủy"
+              onConfirm={() => handleCancelContract(record.id)}
+            >
+              <Button type="primary" danger size="small" style={{ borderRadius: '6px' }}>
+                Hủy HĐ
+              </Button>
+            </Popconfirm>
+          )}
           {record.status === 'active' && (
             <Popconfirm
               title="Thanh lý hợp đồng"
@@ -332,11 +428,7 @@ const ContractManager = () => {
           type="primary" 
           icon={<Plus size={16} />} 
           style={{ background: '#1a3353', border: 'none', height: '40px', borderRadius: '8px', fontWeight: 'bold' }}
-          onClick={() => {
-            setHasCustomPrices(false);
-            form.resetFields();
-            setModalVisible(true);
-          }}
+          onClick={() => handleOpenCreateModal()}
           disabled={tenants.length === 0 || rooms.length === 0}
         >
           Lập hợp đồng mới
@@ -363,9 +455,14 @@ const ContractManager = () => {
         )}
       </Card>
 
-      {/* MODAL THÊM HỢP ĐỒNG MỚI */}
+      {/* MODAL THÊM HỢP ĐỒNG MỚI - GIAO DIỆN HỢP ĐỒNG TRỰC TIẾP (LIVE PAPER CONTRACT) */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><FileSignature size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Lập Hợp đồng thuê phòng mới</span>}
+        title={
+          <span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}>
+            <FileSignature size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> 
+            Lập Hợp đồng thuê phòng mới (Bản thảo trực tiếp)
+          </span>
+        }
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         footer={[
@@ -376,123 +473,137 @@ const ContractManager = () => {
             key="submit" 
             type="primary" 
             loading={submitLoading} 
-            style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }}
+            style={{ background: '#1a3353', border: 'none', borderRadius: '8px', fontWeight: 'bold', padding: '0 24px' }}
             onClick={() => form.submit()}
           >
-            Tạo hợp đồng
+            Khởi tạo & Ký hợp đồng
           </Button>
         ]}
-        width={750}
+        width={900}
         centered
+        destroyOnClose
       >
         <Form
           form={form}
           layout="vertical"
           onFinish={handleCreateContract}
           requiredMark={false}
-          style={{ marginTop: '16px' }}
+          style={{ marginTop: '12px' }}
           initialValues={{
             electricityPrice: 3500,
             waterPrice: 20000,
             internetPrice: 100000,
             cleaningPrice: 50000,
             numTenants: 1,
-            paymentDay: 30
+            paymentDay: 30,
+            initialElectricity: 0,
+            initialWater: 0
           }}
         >
-          <Divider style={{ fontWeight: 'bold', margin: '0 0 16px 0' }}>1. Chọn Tòa nhà & Phòng trọ</Divider>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                name="buildingId"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Chọn tòa nhà</span>}
-                rules={[{ required: true, message: 'Vui lòng chọn tòa nhà!' }]}
-              >
-                <Select 
-                  placeholder="Chọn tòa nhà" 
-                  style={{ borderRadius: '8px' }}
-                  onChange={(val) => {
-                    setSelectedBuildingId(val);
-                    form.setFieldsValue({ roomId: undefined });
-                    
-                    // Tự động điền đơn giá dịch vụ của tòa nhà được chọn
-                    const chosenBuilding = buildings.find(b => b.id === val);
-                    if (chosenBuilding) {
-                      const s = chosenBuilding.service || {
-                        electricityPrice: 3500,
-                        waterPrice: 20000,
-                        internetPrice: 100000,
-                        cleaningPrice: 50000
-                      };
-                      form.setFieldsValue({
-                        electricityPrice: parseFloat(s.electricityPrice),
-                        waterPrice: parseFloat(s.waterPrice),
-                        internetPrice: parseFloat(s.internetPrice),
-                        cleaningPrice: parseFloat(s.cleaningPrice),
-                        landlordAddress: chosenBuilding.address || chosenBuilding.name || ''
-                      });
-                    }
-                  }}
-                >
-                  {buildings.map(b => (
-                    <Select.Option key={b.id} value={b.id}>{b.name}</Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            
-            <Col span={8}>
-              <Form.Item
-                name="roomId"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Phòng trống gán hợp đồng</span>}
-                rules={[{ required: true, message: 'Chọn phòng trống!' }]}
-              >
-                <Select placeholder="Chọn phòng trống" style={{ borderRadius: '8px' }} disabled={!selectedBuildingId}>
-                  {rooms
-                    .filter(r => r.buildingId === selectedBuildingId)
-                    .map(r => (
-                      <Select.Option key={r.id} value={r.id}>Phòng {r.roomNumber}</Select.Option>
-                    ))}
-                </Select>
-              </Form.Item>
-            </Col>
-
-            <Col span={8}>
-              <Form.Item
-                name="dates"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Thời hạn thuê phòng</span>}
-                rules={[{ required: true, message: 'Chọn thời hạn thuê!' }]}
-              >
-                <DatePicker.RangePicker style={{ width: '100%', borderRadius: '8px' }} format="DD/MM/YYYY" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Divider style={{ fontWeight: 'bold', margin: '16px 0' }}>2. Thông tin Bên B (Bên thuê phòng)</Divider>
-          
-          {/* PHẦN QUÉT CCCD AI */}
+          {/* BAR CHỌN NHANH TÒA NHÀ & PHÒNG & THỜI HẠN */}
           <Card 
             size="small" 
             style={{ 
               background: '#f8fafc', 
-              border: '1px dashed #cbd5e1', 
-              marginBottom: '16px', 
-              borderRadius: '8px' 
+              border: '1px solid #cbd5e1', 
+              marginBottom: '20px', 
+              borderRadius: '10px' 
+            }}
+          >
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  name="buildingId"
+                  label={<span style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>Chọn Tòa nhà cho thuê</span>}
+                  rules={[{ required: true, message: 'Vui lòng chọn tòa nhà!' }]}
+                  style={{ marginBottom: 0 }}
+                >
+                  <Select 
+                    placeholder="Chọn tòa nhà" 
+                    style={{ borderRadius: '8px' }}
+                    onChange={(val) => {
+                      setSelectedBuildingId(val);
+                      form.setFieldsValue({ roomId: undefined });
+                      
+                      const chosenBuilding = buildings.find(b => b.id === val);
+                      if (chosenBuilding) {
+                        const s = chosenBuilding.service || {
+                          electricityPrice: 3500,
+                          waterPrice: 20000,
+                          internetPrice: 100000,
+                          cleaningPrice: 50000
+                        };
+                        form.setFieldsValue({
+                          electricityPrice: parseFloat(s.electricityPrice),
+                          waterPrice: parseFloat(s.waterPrice),
+                          internetPrice: parseFloat(s.internetPrice),
+                          cleaningPrice: parseFloat(s.cleaningPrice),
+                          landlordAddress: chosenBuilding.address || chosenBuilding.name || ''
+                        });
+                      }
+                    }}
+                  >
+                    {buildings.map(b => (
+                      <Select.Option key={b.id} value={b.id}>{b.name}</Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+              
+              <Col span={8}>
+                <Form.Item
+                  name="roomId"
+                  label={<span style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>Chọn Phòng trống</span>}
+                  rules={[{ required: true, message: 'Chọn phòng trống!' }]}
+                  style={{ marginBottom: 0 }}
+                >
+                  <Select placeholder="Chọn phòng trống" style={{ borderRadius: '8px' }} disabled={!selectedBuildingId}>
+                    {rooms
+                      .filter(r => r.buildingId === selectedBuildingId)
+                      .map(r => (
+                        <Select.Option key={r.id} value={r.id}>Phòng {r.roomNumber} ({formatVND(r.price)}/tháng)</Select.Option>
+                      ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col span={8}>
+                <Form.Item
+                  name="dates"
+                  label={<span style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>Thời hạn thuê phòng</span>}
+                  rules={[{ required: true, message: 'Chọn thời hạn thuê!' }]}
+                  style={{ marginBottom: 0 }}
+                >
+                  <DatePicker.RangePicker style={{ width: '100%', borderRadius: '8px' }} format="DD/MM/YYYY" />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* CARD QUÉT CCCD AI (MẶT TRƯỚC + MẶT SAU) */}
+          <Card 
+            size="small" 
+            style={{ 
+              background: '#f0fdf4', 
+              border: '1px dashed #86efac', 
+              marginBottom: '20px', 
+              borderRadius: '10px' 
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <div>
-                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <UploadCloud size={16} color="#10b981" /> Quét Căn cước công dân (CCCD) bằng AI
+                <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#166534', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <UploadCloud size={16} color="#16a34a" /> Quét ảnh Căn cước công dân (CCCD 2 mặt) bằng AI
                 </div>
-                <div style={{ fontSize: '11px', color: '#64748b' }}>
-                  Tải lên ảnh mặt trước CCCD của khách thuê để AI tự động trích xuất điền thông tin bên dưới.
+                <div style={{ fontSize: '11.5px', color: '#15803d' }}>
+                  Tải lên 1 hoặc 2 ảnh thẻ CCCD (Mặt trước + Mặt sau) để AI tự động trích xuất thông tin khách thuê vào bản hợp đồng.
                 </div>
               </div>
               <Upload
-                beforeUpload={(file) => {
-                  handleCccdUpload(file);
-                  return false; // ngăn upload tự động
+                multiple
+                beforeUpload={(_, fileList) => {
+                  handleCccdUpload(fileList);
+                  return false;
                 }}
                 showUploadList={false}
                 accept="image/*"
@@ -501,229 +612,355 @@ const ContractManager = () => {
                   type="primary" 
                   size="small" 
                   loading={scanningCccd} 
-                  style={{ background: '#10b981', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                  style={{ background: '#16a34a', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                 >
-                  {scanningCccd ? 'AI đang quét...' : 'Tải lên ảnh CCCD'}
+                  {scanningCccd ? 'AI đang quét...' : 'Tải lên ảnh CCCD (1 hoặc 2 mặt)'}
                 </Button>
               </Upload>
             </div>
           </Card>
 
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                name="tenantId"
-                label={
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <span style={{ fontWeight: '600', fontSize: '13px' }}>Chọn tài khoản liên kết</span>
-                    <Button 
-                      type="link" 
-                      size="small" 
-                      icon={<UserPlus size={12} />} 
-                      style={{ padding: 0, height: 'auto', fontSize: '11px', color: '#10b981', fontWeight: 'bold' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setQuickTenantModalVisible(true);
+          {/* CHÍNH THỨC: BẢN HỢP ĐỒNG THUÊ PHÒNG TRỌ TRỰC TIẾP (LIVE PAPER CONTRACT FORM) */}
+          <div style={{ 
+            background: '#ffffff', 
+            border: '1px solid #cbd5e1', 
+            borderRadius: '12px', 
+            padding: '24px',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.03)',
+            lineHeight: '1.8',
+            fontFamily: 'serif',
+            fontSize: '14.5px',
+            color: '#0f172a'
+          }}>
+
+            {/* QUỐC HIỆU TÊU NGỮ */}
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <strong style={{ fontSize: '15px' }}>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><br />
+              <strong style={{ fontSize: '14px' }}>Độc lập - Tự do - Hạnh phúc</strong>
+              <div style={{ borderBottom: '1.5px solid #0f172a', width: '180px', margin: '8px auto' }} />
+            </div>
+
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, fontWeight: '800', fontFamily: 'serif', color: '#0f172a', fontSize: '20px' }}>
+                HỢP ĐỒNG CHO THUÊ PHÒNG TRỌ
+              </h2>
+              <small style={{ color: '#64748b' }}><i>Căn cứ Bộ luật Dân sự nước Cộng hòa Xã hội Chủ nghĩa Việt Nam.</i></small>
+            </div>
+
+            {/* SECTION BÊN A */}
+            <div style={{ marginBottom: '20px', background: '#fafafa', padding: '16px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <strong style={{ color: '#2563eb', fontSize: '14px' }}>BÊN A: BÊN CHO THUÊ (PHÒNG TRỌ)</strong>
+                <Button 
+                  type="link" 
+                  size="small" 
+                  icon={<RotateCcw size={12} />} 
+                  onClick={handleFillDefaultLandlordInfo}
+                  style={{ color: '#2563eb', fontWeight: '600', padding: 0, height: 'auto' }}
+                >
+                  Nạp mặc định từ tài khoản chủ nhà
+                </Button>
+              </div>
+
+              <Row gutter={[12, 8]}>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="landlordName" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Họ và tên Bên A:</span>} rules={[{ required: true, message: 'Nhập tên chủ nhà!' }]} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="Nhập tay hoặc tự điền..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="landlordPhone" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Điện thoại Bên A:</span>} rules={[{ required: true, message: 'Nhập SĐT chủ nhà!' }]} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="SĐT liên hệ..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="landlordCccd" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Số CCCD:</span>} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="Số CCCD chủ nhà..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="landlordDob" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Ngày sinh:</span>} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="DD/MM/YYYY..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="landlordHometown" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Quê quán / HKTT:</span>} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="Quê quán..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24}>
+                  <Form.Item name="landlordAddress" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Địa chỉ bàn giao phòng thuê:</span>} style={{ marginBottom: 0 }}>
+                    <Input placeholder="Địa chỉ chi tiết tòa nhà / phòng trọ..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
+
+            {/* SECTION BÊN B */}
+            <div style={{ marginBottom: '20px', background: '#fafafa', padding: '16px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <strong style={{ color: '#16a34a', fontSize: '14px' }}>BÊN B: BÊN THUÊ (PHÒNG TRỌ)</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Form.Item name="tenantId" noStyle rules={[{ required: true, message: 'Chọn khách thuê!' }]}>
+                    <Select 
+                      placeholder="Chọn tài khoản khách thuê liên kết" 
+                      style={{ width: '220px', borderRadius: '6px' }}
+                      size="small"
+                      onChange={(val) => {
+                        const matched = tenants.find(t => t.id === val);
+                        if (matched) {
+                          form.setFieldsValue({ 
+                            tenantName: matched.name,
+                            tenantPhone: matched.phone 
+                          });
+                        }
                       }}
                     >
-                      + Tạo khách mới
-                    </Button>
-                  </div>
-                }
-                rules={[{ required: true, message: 'Chọn tài khoản liên kết khách thuê!' }]}
-              >
-                <Select 
-                  placeholder="Chọn tài khoản" 
-                  style={{ borderRadius: '8px' }}
-                  onChange={(val) => {
-                    const matched = tenants.find(t => t.id === val);
-                    if (matched) {
-                      form.setFieldsValue({ 
-                        tenantName: matched.name,
-                        tenantPhone: matched.phone 
+                      {tenants.map(t => (
+                        <Select.Option key={t.id} value={t.id}>{t.name} ({t.phone})</Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                  <Button 
+                    type="link" 
+                    size="small" 
+                    icon={<UserPlus size={12} />} 
+                    style={{ color: '#16a34a', fontWeight: 'bold', padding: 0 }}
+                    onClick={() => setQuickTenantModalVisible(true)}
+                  >
+                    + Tạo khách
+                  </Button>
+                </div>
+              </div>
+
+              <Row gutter={[12, 8]}>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="tenantName" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Họ và tên Bên B:</span>} rules={[{ required: true, message: 'Nhập tên khách thuê!' }]} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="AI tự điền từ CCCD hoặc nhập tay..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="tenantPhone" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Điện thoại Bên B:</span>} rules={[{ required: true, message: 'Nhập SĐT khách thuê!' }]} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="Số điện thoại..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="tenantCccd" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Số CCCD Bên B:</span>} rules={[{ required: true, message: 'Nhập CCCD!' }]} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="AI tự điền hoặc nhập tay..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="tenantDob" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Ngày tháng năm sinh:</span>} rules={[{ required: true, message: 'Nhập ngày sinh!' }]} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="DD/MM/YYYY..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Form.Item name="tenantHometown" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Hộ khẩu thường trú (HKTT):</span>} rules={[{ required: true, message: 'Nhập HKTT!' }]} style={{ marginBottom: '8px' }}>
+                    <Input placeholder="AI tự điền hoặc nhập tay..." style={{ borderRadius: '6px' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </div>
+
+            {/* ĐIỀU 1 */}
+            <div style={{ marginBottom: '16px' }}>
+              <strong>ĐIỀU 1: ĐỐI TƯỢNG CỦA HỢP ĐỒNG & THỜI HẠN THUÊ</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                <span>Mục đích thuê để lưu trú sinh hoạt với số lượng người ở thực tế là:</span>
+                <Form.Item name="numTenants" noStyle rules={[{ required: true, message: 'Nhập số người!' }]}>
+                  <InputNumber min={1} size="small" style={{ width: '80px', borderRadius: '6px' }} />
+                </Form.Item>
+                <span>người.</span>
+              </div>
+            </div>
+
+            {/* ĐIỀU 2 */}
+            <div style={{ marginBottom: '20px' }}>
+              <strong>ĐIỀU 2: GIÁ THUÊ, Đ ĐẶT CỌ & CHỈ SỐ TIỆN ÍCH BAN ĐẦU</strong>
+              <Row gutter={[16, 8]} style={{ marginTop: '8px' }}>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="deposit" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Số tiền đặt cọc (VND):</span>} rules={[{ required: true, message: 'Nhập tiền cọc!' }]} style={{ marginBottom: '8px' }}>
+                    <InputNumber min={0} formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\$\s?|(,*)/g, '')} style={{ width: '100%', borderRadius: '6px' }} placeholder="Tiền đặt cọc phòng..." />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="paymentDay" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Ngày đóng tiền hàng tháng:</span>} rules={[{ required: true, message: 'Nhập ngày đóng!' }]} style={{ marginBottom: '8px' }}>
+                    <InputNumber min={1} max={31} style={{ width: '100%', borderRadius: '6px' }} placeholder="Ngày đóng tiền (vd: 30)" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="initialElectricity" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Chỉ số ĐIỆN ban đầu (kWh):</span>} rules={[{ required: true, message: 'Nhập số điện!' }]} style={{ marginBottom: '8px' }}>
+                    <InputNumber min={0} style={{ width: '100%', borderRadius: '6px' }} placeholder="Ví dụ: 10450" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Form.Item name="initialWater" label={<span style={{ fontFamily: 'sans-serif', fontSize: '12px', fontWeight: '600' }}>Chỉ số NƯỚC ban đầu (m³):</span>} rules={[{ required: true, message: 'Nhập số nước!' }]} style={{ marginBottom: '8px' }}>
+                    <InputNumber min={0} style={{ width: '100%', borderRadius: '6px' }} placeholder="Ví dụ: 120" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item name="hasCustomPrices" valuePropName="checked" style={{ margin: '8px 0' }}>
+                <Checkbox onChange={(e) => {
+                  const checked = e.target.checked;
+                  setHasCustomPrices(checked);
+                  if (checked) {
+                    const chosenBuilding = buildings.find(b => b.id === form.getFieldValue('buildingId'));
+                    if (chosenBuilding) {
+                      const s = chosenBuilding.service || { electricityPrice: 3500, waterPrice: 20000, internetPrice: 100000, cleaningPrice: 50000 };
+                      form.setFieldsValue({
+                        electricityPrice: parseFloat(s.electricityPrice),
+                        waterPrice: parseFloat(s.waterPrice),
+                        internetPrice: parseFloat(s.internetPrice),
+                        cleaningPrice: parseFloat(s.cleaningPrice)
                       });
                     }
-                  }}
+                  }
+                }}>
+                  Thiết lập đơn giá dịch vụ thỏa thuận riêng cho phòng này
+                </Checkbox>
+              </Form.Item>
+
+              {hasCustomPrices && (
+                <Row gutter={12} style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', marginTop: '8px' }}>
+                  <Col span={6}>
+                    <Form.Item name="electricityPrice" label={<span style={{ fontSize: '11px', fontWeight: 'bold' }}>Giá Điện (VND/kWh)</span>} style={{ marginBottom: 0 }}>
+                      <InputNumber min={0} style={{ width: '100%', borderRadius: '6px' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={6}>
+                    <Form.Item name="waterPrice" label={<span style={{ fontSize: '11px', fontWeight: 'bold' }}>Giá Nước (VND/m³)</span>} style={{ marginBottom: 0 }}>
+                      <InputNumber min={0} style={{ width: '100%', borderRadius: '6px' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={6}>
+                    <Form.Item name="internetPrice" label={<span style={{ fontSize: '11px', fontWeight: 'bold' }}>Mạng Internet (/tháng)</span>} style={{ marginBottom: 0 }}>
+                      <InputNumber min={0} style={{ width: '100%', borderRadius: '6px' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={6}>
+                    <Form.Item name="cleaningPrice" label={<span style={{ fontSize: '11px', fontWeight: 'bold' }}>Phí vệ sinh (/tháng)</span>} style={{ marginBottom: 0 }}>
+                      <InputNumber min={0} style={{ width: '100%', borderRadius: '6px' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              )}
+            </div>
+
+            {/* ĐIỀU 3: ĐỒ DÙNG BÀN GIAO */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <strong>ĐIỀU 3: DANH SÁCH ĐỒ DÙNG & THIẾT BỊ BÀN GIAO KÈM PHÒNG TRỌ</strong>
+                <Button 
+                  type="dashed" 
+                  size="small" 
+                  onClick={() => setInventoryList([...inventoryList, { name: '', quantity: 1, status: 'Bình thường' }])}
+                  style={{ borderRadius: '6px', fontSize: '12px' }}
                 >
-                  {tenants.map(t => (
-                    <Select.Option key={t.id} value={t.id}>{t.name} ({t.phone})</Select.Option>
+                  + Thêm đồ dùng
+                </Button>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '6px', fontFamily: 'sans-serif', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ background: '#f1f5f9' }}>
+                    <th style={{ border: '1px solid #cbd5e1', padding: '6px', textAlign: 'center', width: '40px' }}>STT</th>
+                    <th style={{ border: '1px solid #cbd5e1', padding: '6px', textAlign: 'left' }}>Tên loại thiết bị / đồ dùng</th>
+                    <th style={{ border: '1px solid #cbd5e1', padding: '6px', textAlign: 'center', width: '100px' }}>Số lượng</th>
+                    <th style={{ border: '1px solid #cbd5e1', padding: '6px', textAlign: 'left', width: '160px' }}>Tình trạng bàn giao</th>
+                    <th style={{ border: '1px solid #cbd5e1', padding: '6px', textAlign: 'center', width: '50px' }}>Xóa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventoryList.map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '4px', textAlign: 'center' }}>{idx + 1}</td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '4px' }}>
+                        <Input 
+                          value={item.name} 
+                          onChange={(e) => {
+                            const updated = [...inventoryList];
+                            updated[idx].name = e.target.value;
+                            setInventoryList(updated);
+                          }}
+                          placeholder="Tên thiết bị..."
+                          size="small"
+                          bordered={false}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '4px', textAlign: 'center' }}>
+                        <InputNumber 
+                          min={1} 
+                          value={item.quantity} 
+                          onChange={(val) => {
+                            const updated = [...inventoryList];
+                            updated[idx].quantity = val || 1;
+                            setInventoryList(updated);
+                          }}
+                          size="small"
+                          style={{ width: '60px' }}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '4px' }}>
+                        <Input 
+                          value={item.status} 
+                          onChange={(e) => {
+                            const updated = [...inventoryList];
+                            updated[idx].status = e.target.value;
+                            setInventoryList(updated);
+                          }}
+                          size="small"
+                          bordered={false}
+                        />
+                      </td>
+                      <td style={{ border: '1px solid #cbd5e1', padding: '4px', textAlign: 'center' }}>
+                        <Button 
+                          type="text" 
+                          danger 
+                          size="small" 
+                          icon={<Trash2 size={14} />} 
+                          onClick={() => setInventoryList(inventoryList.filter((_, i) => i !== idx))}
+                        />
+                      </td>
+                    </tr>
                   ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            
-            <Col span={8}>
-              <Form.Item
-                name="tenantName"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Họ tên người thuê (Bên B)</span>}
-                rules={[{ required: true, message: 'Vui lòng nhập tên người thuê!' }]}
-              >
-                <Input placeholder="AI tự điền hoặc nhập tay" style={{ borderRadius: '8px' }} />
-              </Form.Item>
-            </Col>
+                </tbody>
+              </table>
+            </div>
 
-            <Col span={8}>
-              <Form.Item
-                name="tenantPhone"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số điện thoại người thuê</span>}
-                rules={[{ required: true, message: 'Vui lòng nhập số điện thoại!' }]}
-              >
-                <Input placeholder="AI tự điền hoặc nhập tay" style={{ borderRadius: '8px' }} />
-              </Form.Item>
-            </Col>
-          </Row>
+            {/* CHỮ KÝ 2 BÊN TRÊN BẢN GIẤY */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px', paddingTop: '20px', borderTop: '1px dashed #cbd5e1' }}>
+              <div style={{ textAlign: 'center', width: '45%' }}>
+                <strong>ĐẠI DIỆN BÊN A (CHỦ NHÀ)</strong><br />
+                <small style={{ color: '#64748b' }}>(Ký và ghi rõ họ tên)</small><br />
+                {landlordSignature ? (
+                  <div style={{ margin: '10px 0' }}>
+                    <img src={landlordSignature} alt="Chữ ký bên A" style={{ maxHeight: '70px', objectFit: 'contain' }} /><br />
+                    <Button size="small" type="link" onClick={() => setSignatureModalVisible(true)}>Ký lại</Button>
+                  </div>
+                ) : (
+                  <div style={{ margin: '14px 0' }}>
+                    <Button 
+                      type="primary" 
+                      icon={<FileSignature size={14} />}
+                      onClick={() => setSignatureModalVisible(true)}
+                      style={{ background: '#2563eb', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+                    >
+                      Vẽ chữ ký số Bên A
+                    </Button>
+                  </div>
+                )}
+              </div>
 
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                name="tenantCccd"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số CCCD người thuê</span>}
-                rules={[{ required: true, message: 'Nhập số CCCD khách thuê!' }]}
-              >
-                <Input placeholder="AI tự điền hoặc nhập tay" style={{ borderRadius: '8px' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="tenantDob"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Ngày tháng năm sinh</span>}
-                rules={[{ required: true, message: 'Nhập ngày sinh!' }]}
-              >
-                <Input placeholder="AI tự điền hoặc nhập tay (DD/MM/YYYY)" style={{ borderRadius: '8px' }} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="tenantHometown"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Hộ khẩu thường trú (HKTT)</span>}
-                rules={[{ required: true, message: 'Nhập quê quán/thường trú!' }]}
-              >
-                <Input placeholder="AI tự điền hoặc nhập tay" style={{ borderRadius: '8px' }} />
-              </Form.Item>
-            </Col>
-          </Row>
+              <div style={{ textAlign: 'center', width: '45%' }}>
+                <strong>ĐẠI DIỆN BÊN B (KHÁCH THUÊ)</strong><br />
+                <small style={{ color: '#64748b' }}>(Ký và ghi rõ họ tên)</small><br />
+                <div style={{ margin: '20px 0', color: '#f59e0b', fontStyle: 'italic', fontSize: '13px' }}>
+                  (Người thuê sẽ đăng nhập và ký nốt sau khi hợp đồng được khởi tạo)
+                </div>
+              </div>
+            </div>
 
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="numTenants"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số lượng người ở cùng phòng</span>}
-                rules={[{ required: true, message: 'Nhập số người ở!' }]}
-              >
-                <InputNumber min={1} style={{ width: '100%', borderRadius: '8px' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="paymentDay"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Ngày đóng tiền phòng hàng tháng</span>}
-                rules={[{ required: true, message: 'Chọn ngày đóng tiền!' }]}
-              >
-                <InputNumber min={1} max={31} placeholder="Ví dụ: ngày 30 hàng tháng" style={{ width: '100%', borderRadius: '8px' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Divider style={{ fontWeight: 'bold', margin: '16px 0' }}>3. Đơn giá Đặt cọc & Chỉ số Tiện ích</Divider>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                name="deposit"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số tiền đặt cọc (VND)</span>}
-                rules={[{ required: true, message: 'Nhập số tiền đặt cọc!' }]}
-              >
-                <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="Ví dụ: 1,500,000" />
-              </Form.Item>
-            </Col>
-            
-            <Col span={8}>
-              <Form.Item
-                name="initialElectricity"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Chỉ số ĐIỆN ban đầu (kWh)</span>}
-                rules={[{ required: true, message: 'Nhập số điện bắt đầu!' }]}
-              >
-                <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="Ví dụ: 10450" />
-              </Form.Item>
-            </Col>
-            
-            <Col span={8}>
-              <Form.Item
-                name="initialWater"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Chỉ số NƯỚC ban đầu (m³)</span>}
-                rules={[{ required: true, message: 'Nhập số nước bắt đầu!' }]}
-              >
-                <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} placeholder="Ví dụ: 120" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Form.Item name="hasCustomPrices" valuePropName="checked" style={{ margin: '16px 0 8px 0' }}>
-            <Checkbox onChange={(e) => {
-              const checked = e.target.checked;
-              setHasCustomPrices(checked);
-              if (checked) {
-                const chosenBuilding = buildings.find(b => b.id === form.getFieldValue('buildingId'));
-                if (chosenBuilding) {
-                  const s = chosenBuilding.service || {
-                    electricityPrice: 3500,
-                    waterPrice: 20000,
-                    internetPrice: 100000,
-                    cleaningPrice: 50000
-                  };
-                  form.setFieldsValue({
-                    electricityPrice: parseFloat(s.electricityPrice),
-                    waterPrice: parseFloat(s.waterPrice),
-                    internetPrice: parseFloat(s.internetPrice),
-                    cleaningPrice: parseFloat(s.cleaningPrice)
-                  });
-                }
-              }
-            }}>
-              Thiết lập đơn giá dịch vụ thỏa thuận riêng cho phòng này (Trường hợp đặc biệt)
-            </Checkbox>
-          </Form.Item>
-
-          <div style={{ display: hasCustomPrices ? 'block' : 'none' }}>
-            <Divider style={{ margin: '12px 0', fontWeight: 'bold' }}>Đơn giá dịch vụ thỏa thuận riêng</Divider>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="electricityPrice"
-                  label={<span style={{ fontWeight: '600', fontSize: '12px' }}>Đơn giá Điện (VND/kWh)</span>}
-                  rules={[{ required: hasCustomPrices, message: 'Nhập giá điện!' }]}
-                >
-                  <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="waterPrice"
-                  label={<span style={{ fontWeight: '600', fontSize: '12px' }}>Đơn giá Nước (VND/m³)</span>}
-                  rules={[{ required: hasCustomPrices, message: 'Nhập giá nước!' }]}
-                >
-                  <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-                </Form.Item>
-              </Col>
-            </Row>
-
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="internetPrice"
-                  label={<span style={{ fontWeight: '600', fontSize: '12px' }}>Internet / tháng (VND)</span>}
-                >
-                  <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="cleaningPrice"
-                  label={<span style={{ fontWeight: '600', fontSize: '12px' }}>Vệ sinh / tháng (VND)</span>}
-                >
-                  <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-                </Form.Item>
-              </Col>
-            </Row>
           </div>
 
         </Form>
@@ -734,7 +971,7 @@ const ContractManager = () => {
         title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><FileSignature size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Bản Hợp đồng thuê phòng trọ chi tiết</span>}
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
-        width={800}
+        width={850}
         centered
         footer={[
           <Button key="close" onClick={() => setDetailModalVisible(false)} style={{ borderRadius: '8px' }}>
@@ -769,7 +1006,7 @@ const ContractManager = () => {
 
             <div style={{ marginBottom: '16px' }}>
               <strong>BÊN A: BÊN CHO THUÊ (PHÒNG TRỌ)</strong><br />
-              - Họ và Tên: {selectedContract.landlordName || selectedContract.room?.building?.landlord?.name || 'Nguyễn Thị Ngọc Diệp'}<br />
+              - Họ và Tên: {selectedContract.landlordName || selectedContract.room?.building?.landlord?.name || 'N/A'}<br />
               - Điện thoại: {selectedContract.landlordPhone || selectedContract.room?.building?.landlord?.phone || 'N/A'}<br />
               - CCCD số: {selectedContract.landlordCccd || 'Chưa cung cấp'}<br />
               - HK thường trú: {selectedContract.landlordHometown || 'N/A'}<br />
@@ -778,7 +1015,7 @@ const ContractManager = () => {
 
             <div style={{ marginBottom: '16px' }}>
               <strong>BÊN B: BÊN THUÊ (PHÒNG TRỌ)</strong><br />
-              - Họ và Tên: {selectedContract.tenantName || selectedContract.tenant?.name || 'Tạ Đình Cường'}<br />
+              - Họ và Tên: {selectedContract.tenantName || selectedContract.tenant?.name || 'N/A'}<br />
               - Điện thoại: {selectedContract.tenantPhone || selectedContract.tenant?.phone || 'N/A'}<br />
               - CCCD số: {selectedContract.tenantCccd || 'Chưa cung cấp'} {selectedContract.tenantDob && ` - Ngày sinh: ${selectedContract.tenantDob}`}<br />
               - HK thường trú: {selectedContract.tenantHometown || 'N/A'}
@@ -796,8 +1033,8 @@ const ContractManager = () => {
               - Hai bên nhất trí giá thuê phòng trọ là: <strong>{formatVND(selectedContract.room?.price)} / tháng</strong>.<br />
               - Tiền đặt cọc phòng: <strong>{formatVND(selectedContract.deposit)}</strong> (Được hoàn trả lại đầy đủ khi kết thúc hợp đồng theo quy định).<br />
               - Đơn giá dịch vụ tiện ích áp dụng:<br />
-              &nbsp;&nbsp;+ Tiền điện: {formatVND(selectedContract.electricityPrice)} / kWh<br />
-              &nbsp;&nbsp;+ Tiền nước: {formatVND(selectedContract.waterPrice)} / m³ hoặc theo đầu người<br />
+              &nbsp;&nbsp;+ Tiền điện: {formatVND(selectedContract.electricityPrice)} / kWh (Chỉ số đầu: {selectedContract.initialElectricity || 0} kWh)<br />
+              &nbsp;&nbsp;+ Tiền nước: {formatVND(selectedContract.waterPrice)} / m³ (Chỉ số đầu: {selectedContract.initialWater || 0} m³)<br />
               &nbsp;&nbsp;+ Phí Internet: {formatVND(selectedContract.internetPrice)} / tháng<br />
               &nbsp;&nbsp;+ Phí vệ sinh dịch vụ: {formatVND(selectedContract.cleaningPrice)} / tháng<br />
               - Kỳ thanh toán: Bên B có nghĩa vụ thanh toán đầy đủ tiền phòng trọ và dịch vụ vào ngày {selectedContract.paymentDay || 30} hàng tháng.
@@ -816,7 +1053,7 @@ const ContractManager = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {JSON.parse(selectedContract.inventory).map((item, index) => (
+                    {(typeof selectedContract.inventory === 'string' ? JSON.parse(selectedContract.inventory) : selectedContract.inventory).map((item, index) => (
                       <tr key={index}>
                         <td style={{ border: '1px solid #cbd5e1', padding: '6px', textAlign: 'center', fontSize: '13px' }}>{index + 1}</td>
                         <td style={{ border: '1px solid #cbd5e1', padding: '6px', fontSize: '13px' }}>{item.name}</td>
@@ -834,13 +1071,29 @@ const ContractManager = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', paddingBottom: '40px' }}>
               <div style={{ textAlign: 'center', width: '45%' }}>
                 <strong>Đại diện Bên A</strong><br />
-                <small>(Ký và ghi rõ họ tên)</small><br /><br /><br /><br />
-                <strong>{selectedContract.landlordName || selectedContract.room?.building?.landlord?.name || 'Nguyễn Thị Ngọc Diệp'}</strong>
+                <small>(Ký và ghi rõ họ tên)</small><br />
+                {selectedContract.landlordSignature ? (
+                  <div style={{ margin: '10px 0' }}>
+                    <img src={selectedContract.landlordSignature} alt="Chữ ký bên A" style={{ maxHeight: '80px', objectFit: 'contain' }} /><br />
+                    <small style={{ color: '#64748b' }}>Ký ngày: {selectedContract.landlordSignedAt ? new Date(selectedContract.landlordSignedAt).toLocaleDateString('vi-VN') : 'N/A'}</small>
+                  </div>
+                ) : <div style={{ height: '60px' }} />}
+                <strong>{selectedContract.landlordName || selectedContract.room?.building?.landlord?.name || 'N/A'}</strong>
               </div>
               <div style={{ textAlign: 'center', width: '45%' }}>
                 <strong>Đại diện Bên B</strong><br />
-                <small>(Ký và ghi rõ họ tên)</small><br /><br /><br /><br />
-                <strong>{selectedContract.tenantName || selectedContract.tenant?.name || 'Tạ Đình Cường'}</strong>
+                <small>(Ký và ghi rõ họ tên)</small><br />
+                {selectedContract.tenantSignature ? (
+                  <div style={{ margin: '10px 0' }}>
+                    <img src={selectedContract.tenantSignature} alt="Chữ ký bên B" style={{ maxHeight: '80px', objectFit: 'contain' }} /><br />
+                    <small style={{ color: '#64748b' }}>Ký ngày: {selectedContract.tenantSignedAt ? new Date(selectedContract.tenantSignedAt).toLocaleDateString('vi-VN') : 'N/A'}</small>
+                  </div>
+                ) : (
+                  <div style={{ margin: '20px 0', color: '#f59e0b', fontStyle: 'italic', fontSize: '13px' }}>
+                    (Chờ người thuê ký xác nhận)
+                  </div>
+                )}
+                <strong>{selectedContract.tenantName || selectedContract.tenant?.name || 'N/A'}</strong>
               </div>
             </div>
           </div>
@@ -905,6 +1158,18 @@ const ContractManager = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* MODAL KÝ SỐ CHỦ NHÀ (BÊN A) */}
+      <SignaturePadModal
+        open={signatureModalVisible}
+        onCancel={() => setSignatureModalVisible(false)}
+        onConfirm={(sigBase64) => {
+          setLandlordSignature(sigBase64);
+          setSignatureModalVisible(false);
+          message.success('Đã lưu chữ ký số của Bên A (Chủ nhà)');
+        }}
+        title="Vẽ chữ ký điện tử đại diện Bên A (Chủ nhà)"
+      />
     </div>
   );
 };
