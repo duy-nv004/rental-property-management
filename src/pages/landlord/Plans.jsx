@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Row, Col, Card, Button, Modal, Tag, Spin, message, Segmented } from 'antd';
-import { Landmark, Crown, Clock, Calendar, Sparkles, CheckCircle2, Zap, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Landmark, Crown, Clock, Calendar, Sparkles, CheckCircle2, Zap, Loader2, AlertTriangle } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 
 const PLAN_TIERS = { free: 0, basic: 1, pro: 2 };
@@ -11,9 +11,9 @@ const Plans = () => {
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [billingCycle, setBillingCycle] = useState('annual'); // 'monthly' hoặc 'annual'
-  const [submitLoading, setSubmitLoading] = useState(false);
-  
+
   const [userProfile, setUserProfile] = useState(null);
+  const [pendingUpgrade, setPendingUpgrade] = useState(null);
   const [bankConfig, setBankConfig] = useState({ bankId: '', bankAccount: '', bankName: '' });
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -36,9 +36,12 @@ const Plans = () => {
       setPlans(plansData);
 
       if (profileData) {
-        setUserProfile(profileData);
+        // `pendingUpgrade` là trạng thái riêng, không lưu lẫn vào object user trong localStorage
+        const { pendingUpgrade: pending, ...profile } = profileData;
+        setUserProfile(profile);
+        setPendingUpgrade(pending || null);
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-        const updatedUser = { ...storedUser, ...profileData };
+        const updatedUser = { ...storedUser, ...profile };
         localStorage.setItem('user', JSON.stringify(updatedUser));
       } else {
         setUserProfile(user);
@@ -116,7 +119,8 @@ const Plans = () => {
         const updatedUser = { ...user, ...(response.user || {}), plan: 'free', planExpiresAt: null };
         localStorage.setItem('user', JSON.stringify(updatedUser));
         setUserProfile(response.user || updatedUser);
-        
+        setPendingUpgrade(null);
+
         window.dispatchEvent(new Event('storage'));
         fetchPlans();
       } catch (err) {
@@ -128,6 +132,20 @@ const Plans = () => {
 
     setSelectedPlan(plan);
     setPaymentModalVisible(true);
+    setPendingUpgrade(null);
+
+    // Gói trả phí: chỉ GHI NHẬN yêu cầu nâng cấp ở trạng thái chờ thanh toán.
+    // Gói cước chỉ được kích hoạt khi SePay xác nhận đã nhận đủ tiền (xem polling bên dưới).
+    try {
+      const response = await axiosInstance.post('/auth/upgrade-request', {
+        planName: plan.name,
+        billingCycle: billingCycle
+      });
+      setPendingUpgrade(response.request || null);
+    } catch (err) {
+      console.error(err);
+      message.error(err.response?.data?.message || 'Không thể tạo yêu cầu nâng cấp gói cước.');
+    }
   };
 
   const handleSelectPlan = (plan) => {
@@ -191,7 +209,7 @@ const Plans = () => {
               Gói <strong>{currentPlanName.toUpperCase()}</strong> của bạn vẫn đang hoạt động ({currentStatus.daysLeftText}).
             </p>
             <p style={{ margin: 0, color: '#dc2626', fontWeight: '600' }}>
-              Nếu hạ cấp xuống gói <strong>{plan.name.toUpperCase()}</strong>, bạn sẽ bị giảm hạn mức tòa nhà, số phòng và tính năng AI ngay lập tức. Bạn có chắc chắn muốn hạ cấp không?
+              Nếu hạ cấp xuống gói <strong>{plan.name.toUpperCase()}</strong>, bạn cần hoàn tất thanh toán cho gói mới; hạn mức tòa nhà, số phòng và tính năng AI sẽ được áp dụng ngay sau khi gói mới được kích hoạt. Bạn có chắc chắn muốn hạ cấp không?
             </p>
           </div>
         ),
@@ -205,34 +223,6 @@ const Plans = () => {
     }
 
     executeChangePlan(plan);
-  };
-
-  // Kích hoạt thủ công / xác nhận đã chuyển khoản
-  const handleConfirmPayment = async () => {
-    if (!selectedPlan) return;
-    setSubmitLoading(true);
-    try {
-      const response = await axiosInstance.post('/auth/upgrade-request', {
-        planName: selectedPlan.name,
-        billingCycle: billingCycle
-      });
-      message.success(response.message);
-      
-      const updatedUser = { ...user, plan: response.user.plan, planExpiresAt: response.user.planExpiresAt };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setUserProfile(response.user);
-      
-      window.dispatchEvent(new Event('storage'));
-      
-      setPaymentModalVisible(false);
-      fetchPlans();
-    } catch (err) {
-      console.error(err);
-      const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi nâng cấp gói cước.';
-      message.error(errMsg);
-    } finally {
-      setSubmitLoading(false);
-    }
   };
 
   const getPlanDetails = (name) => {
@@ -619,7 +609,10 @@ const Plans = () => {
         {selectedPlan && (() => {
           const isAnnual = billingCycle === 'annual';
           const targetPrice = isAnnual ? parseFloat(selectedPlan.annualPrice) : parseFloat(selectedPlan.price);
-          const sepayCode = `PLAN ${(userProfile?.id || user?.id)} ${selectedPlan.name.toUpperCase()}${isAnnual ? ' YEAR' : ''}`;
+          // Ưu tiên mã chuyển khoản & số tiền do Backend ghi nhận trong yêu cầu nâng cấp
+          const sepayCode = pendingUpgrade?.transferCode
+            || `PLAN ${(userProfile?.id || user?.id)} ${selectedPlan.name.toUpperCase()}${isAnnual ? ' YEAR' : ''}`;
+          const amountVnd = pendingUpgrade?.amount || Math.round(targetPrice * 25000);
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 0' }}>
@@ -641,7 +634,7 @@ const Plans = () => {
               {/* Tạo mã QR SePay tự động gạch nợ / nâng cấp */}
               <div style={{ background: '#ffffff', padding: '12px', borderRadius: '16px', border: '2px solid #6366f1', marginBottom: '14px', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.1)' }}>
                 <img 
-                  src={`https://qr.sepay.vn/img?bank=${bankConfig.bankId}&acc=${bankConfig.bankAccount}&template=compact&amount=${targetPrice * 25000}&des=${encodeURIComponent(sepayCode)}`} 
+                  src={`https://qr.sepay.vn/img?bank=${bankConfig.bankId}&acc=${bankConfig.bankAccount}&template=compact&amount=${amountVnd}&des=${encodeURIComponent(sepayCode)}`}
                   alt="SePay VietQR Upgrade Plan" 
                   style={{ width: '220px', height: '220px', display: 'block', borderRadius: '8px' }}
                 />
@@ -651,7 +644,7 @@ const Plans = () => {
               <div style={{ width: '100%', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Loader2 size={20} color="#2563eb" style={{ animation: 'spin 1.5s linear infinite' }} />
                 <div style={{ fontSize: '12px', color: '#1e40af', fontWeight: '600' }}>
-                  Đang lắng nghe tự động từ SePay Webhook...
+                  {pendingUpgrade?.id ? `Đã ghi nhận yêu cầu #${pendingUpgrade.id}. ` : ''}Đang lắng nghe tự động từ SePay Webhook...
                 </div>
               </div>
 
