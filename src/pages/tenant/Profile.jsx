@@ -43,12 +43,19 @@ const TenantProfile = () => {
 
   const handlePasswordChange = async (values) => {
     setChangePasswordLoading(true);
-    // Giả lập đổi mật khẩu thành công do backend chưa có API đổi mật khẩu riêng biệt
-    setTimeout(() => {
+    try {
+      await axiosInstance.put('/auth/change-password', {
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword
+      });
       message.success('Cập nhật mật khẩu mới thành công!');
       form.resetFields();
+    } catch (err) {
+      console.error('Error changing password:', err);
+      message.error(err.response?.data?.message || 'Không thể đổi mật khẩu. Vui lòng kiểm tra lại mật khẩu hiện tại.');
+    } finally {
       setChangePasswordLoading(false);
-    }, 1000);
+    }
   };
 
   if (loading) {

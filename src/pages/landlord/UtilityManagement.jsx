@@ -184,10 +184,15 @@ const UtilityManagement = () => {
 
     setBulkSaving(true);
     let successCount = 0;
-    try {
-      await Promise.all(roomsToProcess.map(async (room) => {
-        const input = readingsInput[room.id];
-        // B1: Ghi số
+    const failed = [];
+
+    // Chạy TUẦN TỰ thay vì Promise.all: với Promise.all, một phòng lỗi sẽ làm cả lô
+    // reject ngay, nhưng các phòng đã xử lý trước đó vẫn đã ghi số và tạo hóa đơn —
+    // người dùng thấy báo lỗi, bấm lại, và sinh ra hóa đơn trùng.
+    for (const room of roomsToProcess) {
+      const input = readingsInput[room.id];
+      try {
+        // B1: Ghi số (upsert theo kỳ — chốt lại trong tháng sẽ ghi đè, không nhân bản)
         await axiosInstance.post('/manage/meter-readings/sync', {
           roomId: room.id,
           electricityValue: input.electricity,
@@ -200,15 +205,38 @@ const UtilityManagement = () => {
           year: currentYear
         });
         successCount++;
-      }));
+      } catch (err) {
+        console.error(`Lỗi chốt số phòng ${room.roomNumber}:`, err);
+        failed.push({
+          room: room.roomNumber,
+          message: err.response?.data?.message || 'Lỗi không xác định'
+        });
+      }
+    }
 
-      message.success(`Đã chốt số & Xuất hóa đơn thành công cho ${successCount} phòng!`);
-      // Clear inputs
-      setReadingsInput({});
+    try {
+      if (failed.length === 0) {
+        message.success(`Đã chốt số & Xuất hóa đơn thành công cho ${successCount} phòng!`);
+        setReadingsInput({});
+      } else if (successCount === 0) {
+        message.error(`Không chốt được phòng nào. ${failed[0].room}: ${failed[0].message}`);
+      } else {
+        // Báo rõ phòng nào xong, phòng nào chưa — không nói chung chung là "thất bại"
+        message.warning(
+          `Đã xử lý ${successCount}/${roomsToProcess.length} phòng. ` +
+          `Chưa xong: ${failed.map(f => `P.${f.room} (${f.message})`).join('; ')}`
+        );
+        // Chỉ giữ lại ô nhập của các phòng chưa thành công để bấm lại
+        const failedRooms = roomsToProcess
+          .filter(r => failed.some(f => f.room === r.roomNumber))
+          .map(r => r.id);
+        setReadingsInput(prev => {
+          const kept = {};
+          failedRooms.forEach(id => { if (prev[id]) kept[id] = prev[id]; });
+          return kept;
+        });
+      }
       await fetchData();
-    } catch (err) {
-      console.error(err);
-      message.error('Gặp lỗi khi xử lý chốt số hàng loạt. Vui lòng thử lại.');
     } finally {
       setBulkSaving(false);
     }

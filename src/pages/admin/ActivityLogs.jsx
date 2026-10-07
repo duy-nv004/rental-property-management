@@ -11,6 +11,10 @@ const ACTION_CONFIG = {
   UPDATE_PLAN: { label: 'Cập nhật Gói cước', color: 'blue', bg: '#eff8ff', textColor: '#2563eb' },
   LOCK_USER: { label: 'Khóa Tài khoản', color: 'red', bg: '#fef2f2', textColor: '#dc2626' },
   UNLOCK_USER: { label: 'Mở khóa Tài khoản', color: 'green', bg: '#f0fdf4', textColor: '#16a34a' },
+  TICKET_REJECTED: { label: 'Từ chối khiếu nại', color: 'orange', bg: '#fff7ed', textColor: '#c2410c' },
+  // Ghi nhận từ webhook SePay khi số tiền nhận được nhỏ hơn giá gói / tổng hóa đơn
+  PLAN_PAYMENT_REJECTED: { label: 'Từ chối nâng gói (thiếu tiền)', color: 'orange', bg: '#fff7ed', textColor: '#c2410c' },
+  INVOICE_PAYMENT_REJECTED: { label: 'Từ chối gạch nợ (thiếu tiền)', color: 'orange', bg: '#fff7ed', textColor: '#c2410c' },
 };
 
 const ActionTag = ({ action }) => {

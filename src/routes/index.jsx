@@ -1,4 +1,5 @@
 import { useRoutes, Navigate } from 'react-router-dom';
+import ProtectedRoute from '../components/common/ProtectedRoute';
 
 // Layouts
 import AdminLayout from '../layouts/AdminLayout';
@@ -16,7 +17,6 @@ import TicketManager from '../pages/admin/TicketManager';
 import LandlordDashboard from '../pages/landlord/Dashboard'; // Trang Dashboard của chủ nhà
 import BuildingManager from '../pages/landlord/BuildingManager'; // Trang Asset Inventory
 import TenantManager from '../pages/landlord/TenantManager'; // Trang Active Relationships
-import RoomManager from '../pages/landlord/RoomManager'; // Trang Room Management
 import UtilityManagement from '../pages/landlord/UtilityManagement'; // Trang Utility & Meter
 import Financials from '../pages/landlord/Financials'; // Trang Financial Statistics
 import ContractManager from '../pages/landlord/ContractManager';
@@ -39,7 +39,11 @@ const ThemeRoutes = () => {
     // --- LUỒNG CHO SUPER ADMIN (BẠN) ---
     {
       path: '/admin',
-      element: <AdminLayout />, 
+      element: (
+        <ProtectedRoute allow={['admin']}>
+          <AdminLayout />
+        </ProtectedRoute>
+      ),
       children: [
         { path: 'dashboard', element: <AdminDashboard /> },
         { path: 'landlords', element: <LandlordList /> },
@@ -53,11 +57,16 @@ const ThemeRoutes = () => {
     // --- LUỒNG CHO CHỦ NHÀ (LANDLORD) ---
     {
       path: '/landlord',
-      element: <LandlordLayout />, 
+      element: (
+        <ProtectedRoute allow={['landlord']}>
+          <LandlordLayout />
+        </ProtectedRoute>
+      ),
       children: [
         { path: 'dashboard', element: <LandlordDashboard /> },
         { path: 'buildings', element: <BuildingManager /> },
         { path: 'tenants', element: <TenantManager /> },
+        // Đường dẫn cũ, giữ lại để bookmark cũ không bị 404
         { path: 'rooms', element: <Navigate to="/landlord/buildings" replace /> },
         { path: 'utilities', element: <UtilityManagement /> }, // Phần điện nước
         { path: 'financials', element: <Financials /> },
@@ -72,7 +81,11 @@ const ThemeRoutes = () => {
     // --- LUỒNG CHO NGƯỜI THUÊ (TENANT) ---
     {
       path: '/tenant',
-      element: <TenantLayout />, 
+      element: (
+        <ProtectedRoute allow={['tenant']}>
+          <TenantLayout />
+        </ProtectedRoute>
+      ),
       children: [
         { path: 'dashboard', element: <TenantDashboard /> },
         { path: 'invoices', element: <TenantInvoices /> },
@@ -98,7 +111,7 @@ const ThemeRoutes = () => {
     },
     {
       path: '*',
-      element: <Navigate to="/admin/dashboard" />,
+      element: <Navigate to="/login" />,
     },
   ]);
 };

@@ -190,7 +190,8 @@ const ContractManager = () => {
       const freshTenants = await axiosInstance.get('/manage/tenants');
       setTenants(freshTenants);
       
-      const createdId = response.user?.id || freshTenants.find(t => t.phone === values.phone)?.id;
+      // authService.createTenant trả về { message, tenantId } — không có `user`
+      const createdId = response.tenantId || freshTenants.find(t => t.phone === values.phone)?.id;
       if (createdId) {
         form.setFieldsValue({
           tenantId: createdId,
@@ -256,8 +257,8 @@ const ContractManager = () => {
         landlordAddress: values.landlordAddress,
         landlordSignature: landlordSignature,
 
-        // Thông tin Bên B
-        tenantName: values.tenantName,
+        // Thông tin Bên B (tenantName chỉ dùng để hiển thị trên form;
+        // backend lấy tên từ tài khoản liên kết qua tenantId nên không gửi lên)
         tenantCccd: values.tenantCccd,
         tenantDob: values.tenantDob,
         tenantHometown: values.tenantHometown,

@@ -55,6 +55,15 @@ const LandlordDashboard = () => {
     fetchStats();
   }, [selectedMonth, selectedYear]);
 
+  // Danh sách năm sinh động: năm hiện tại và 4 năm trước đó.
+  // Hardcode [2026, 2025] khiến sang năm sau không chọn được năm hiện tại,
+  // nên hóa đơn mới xuất sẽ không xem được trên màn thống kê.
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => {
+    const y = currentYear - i;
+    return { value: y, label: `Năm ${y}` };
+  });
+
   const formatVND = (value) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
   };
@@ -114,10 +123,7 @@ const LandlordDashboard = () => {
             value={selectedYear}
             style={{ width: 120 }}
             onChange={(val) => setSelectedYear(val)}
-            options={[
-              { value: 2026, label: 'Năm 2026' },
-              { value: 2025, label: 'Năm 2025' }
-            ]}
+            options={yearOptions}
           />
           <Button type="primary" style={{ background: '#1a3353', border: 'none' }} onClick={() => navigate('/landlord/utilities')}>
             Chốt số điện nước

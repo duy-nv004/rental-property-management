@@ -11,7 +11,6 @@ const axiosInstance = axios.create({
 // --- REQUEST INTERCEPTOR: Chạy trước khi gửi request lên server ---
 axiosInstance.interceptors.request.use(
   (config) => {
-    // Lấy token từ localStorage (hoặc nơi bạn lưu trữ)
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -30,13 +29,20 @@ axiosInstance.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    // Xử lý lỗi tập trung
+    const status = error.response?.status;
+
+    // Token hết hạn / không hợp lệ / tài khoản bị khóa: xóa phiên và đưa về trang đăng nhập.
+    // Trước đây chỉ console.error nên người dùng bị kẹt ở màn hình trắng.
+    if (status === 401) {
+      localStorage.clear();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response) {
-      switch (error.response.status) {
-        case 401:
-          console.error("Phiên đăng nhập hết hạn!");
-          // Có thể redirect về trang login ở đây
-          break;
+      switch (status) {
         case 404:
           console.error("Không tìm thấy tài nguyên (API lỗi)!");
           break;

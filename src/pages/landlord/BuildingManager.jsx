@@ -375,7 +375,7 @@ const BuildingManager = () => {
                       </h3>
                       <Popconfirm
                         title="Xóa tòa nhà"
-                        description="Bạn có chắc chắn muốn xóa tòa nhà này không? Tất cả phòng trọ trống sẽ bị xóa."
+                        description="Bạn có chắc chắn muốn xóa tòa nhà này không? Chỉ xóa được khi tòa nhà không còn phòng trọ nào."
                         okText="Xóa"
                         cancelText="Hủy"
                         onConfirm={() => handleDeleteBuilding(b.id)}
