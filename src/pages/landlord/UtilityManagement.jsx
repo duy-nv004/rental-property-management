@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Table, Select, InputNumber, Button, Space, message, Modal, Tag, Alert, Card, Upload, Tooltip } from 'antd';
-import { Calculator, CheckCircle2, Save, Camera, ArrowRight } from 'lucide-react';
+import { Table, Select, InputNumber, Input, Checkbox, Button, Space, message, Modal, Tag, Alert, Card, Upload, Tooltip, DatePicker } from 'antd';
+import dayjs from 'dayjs';
+import { Calculator, CheckCircle2, Save, Camera, ArrowRight, RotateCcw } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
+import PageHeader from '../../components/admin/PageHeader';
+import { computeMeterUsage, buildMeterSyncPayload } from '../../utils/contracts';
 
 const UtilityManagement = () => {
   const navigate = useNavigate();
@@ -11,19 +14,26 @@ const UtilityManagement = () => {
   const [buildings, setBuildings] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
-  
-  // State quản lý giá trị nhập chỉ số cho từng phòng: { [roomId]: { electricity, water } }
+
+  // State quản lý giá trị nhập chỉ số cho từng phòng:
+  // { [roomId]: { electricity, water, electricityReset, waterReset, resetReason } }
   const [readingsInput, setReadingsInput] = useState({});
   const [savingRoomId, setSavingRoomId] = useState(null);
   const [bulkSaving, setBulkSaving] = useState(false);
 
   const [invoiceResult, setInvoiceResult] = useState(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [scanningStates, setScanningStates] = useState({});
 
-  const currentMonth = new Date().getMonth() + 1;
-  const currentYear = new Date().getFullYear();
+  // Kỳ chốt số do chủ nhà chọn. Mặc định: ngày 1-5 là chốt cho tháng trước, sau đó là tháng hiện tại.
+  const [periodDate, setPeriodDate] = useState(() =>
+    (dayjs().date() <= 5 ? dayjs().subtract(1, 'month') : dayjs()).startOf('month'));
+  const currentMonth = periodDate.month() + 1;
+  const currentYear = periodDate.year();
+  // Kỳ chốt số dạng YYYY-MM, gửi kèm khi chốt số để khớp với kỳ của hóa đơn
+  const currentPeriod = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [buildingsData, roomsData] = await Promise.all([
@@ -32,11 +42,11 @@ const UtilityManagement = () => {
       ]);
       setBuildings(buildingsData);
       setRooms(roomsData);
-      
+
       if (location.state?.buildingId) {
         setSelectedBuildingId(location.state.buildingId);
       } else if (buildingsData.length > 0) {
-        setSelectedBuildingId(buildingsData[0].id);
+        setSelectedBuildingId((prev) => prev ?? buildingsData[0].id);
       }
     } catch (err) {
       console.error('Error fetching utility data:', err);
@@ -44,20 +54,25 @@ const UtilityManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [location.state]);
 
   useEffect(() => {
     fetchData();
-  }, [location.state]);
+  }, [fetchData]);
 
-  // Lấy chỉ số đo lường cũ gần nhất của phòng
+  // Lấy chỉ số cũ = bản ghi của kỳ gần nhất TRƯỚC kỳ hiện tại, giống cách backend tính hóa đơn.
   const getLatestReading = (roomReadings, type) => {
     if (!roomReadings || roomReadings.length === 0) return 0;
     const filtered = roomReadings
-      .filter(r => r.type === type)
-      .sort((a, b) => (b.id || 0) - (a.id || 0) || new Date(b.createdAt || b.readingDate) - new Date(a.createdAt || a.readingDate));
+      .filter(r => r.type === type && r.period && r.period < currentPeriod)
+      .sort((a, b) => b.period.localeCompare(a.period));
     return filtered.length > 0 ? filtered[0].readingValue : 0;
   };
+
+  // Phòng đã xuất hóa đơn kỳ này thì coi là đã chốt: hiện số cũ -> số mới, không cho chốt lại
+  const isClosed = (room) => (room.invoices || []).some(i => Number(i.month) === currentMonth && Number(i.year) === currentYear);
+  const getCurrentReading = (roomReadings, type) =>
+    (roomReadings || []).find(r => r.type === type && r.period === currentPeriod)?.readingValue;
 
   // Cập nhật giá trị nhập vào ô Input của từng phòng
   const handleInputChange = (roomId, field, value) => {
@@ -70,14 +85,12 @@ const UtilityManagement = () => {
     }));
   };
 
-  const [scanningStates, setScanningStates] = useState({});
-
   const handleMeterUpload = async (roomId, type, file) => {
     const stateKey = `${roomId}-${type}`;
     setScanningStates(prev => ({ ...prev, [stateKey]: true }));
     const formData = new FormData();
     formData.append('meterImage', file);
-    
+
     try {
       const res = await axiosInstance.post('/ai/read-meter', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -97,37 +110,46 @@ const UtilityManagement = () => {
     }
   };
 
+  const validateRoomInput = (room, input) => {
+    const elecVal = input?.electricity;
+    const waterVal = input?.water;
+    if (elecVal === undefined || elecVal === null || waterVal === undefined || waterVal === null) {
+      return `Vui lòng nhập cả số điện và nước cho Phòng ${room.roomNumber}!`;
+    }
+    const prevElec = getLatestReading(room.readings, 'electricity');
+    const prevWater = getLatestReading(room.readings, 'water');
+    const elecReset = Boolean(input?.electricityReset);
+    const waterReset = Boolean(input?.waterReset);
+    const reason = (input?.resetReason || '').trim();
+
+    if ((elecReset || waterReset) && reason.length < 5) {
+      return `Phòng ${room.roomNumber}: Vui lòng nhập lý do thay/reset đồng hồ (tối thiểu 5 ký tự)!`;
+    }
+    if (!elecReset && elecVal < prevElec) {
+      return `Phòng ${room.roomNumber}: Chỉ số ĐIỆN mới (${elecVal}) không được nhỏ hơn chỉ số cũ (${prevElec}). Nếu vừa thay đồng hồ, hãy bật "Thay đồng hồ mới"!`;
+    }
+    if (!waterReset && waterVal < prevWater) {
+      return `Phòng ${room.roomNumber}: Chỉ số NƯỚC mới (${waterVal}) không được nhỏ hơn chỉ số cũ (${prevWater}). Nếu vừa thay đồng hồ, hãy bật "Thay đồng hồ mới"!`;
+    }
+    return null;
+  };
+
   // 1. Chốt số & Xuất Hóa Đơn cho Từng Phòng
   const handleSaveAndGenerateInvoice = async (room) => {
     const input = readingsInput[room.id];
-    const elecVal = input?.electricity;
-    const waterVal = input?.water;
-
-    if (elecVal === undefined || elecVal === null || waterVal === undefined || waterVal === null) {
-      message.warning(`Vui lòng nhập cả số điện và nước cho Phòng ${room.roomNumber}!`);
-      return;
-    }
-
-    const prevElec = getLatestReading(room.readings, 'electricity');
-    const prevWater = getLatestReading(room.readings, 'water');
-
-    if (elecVal < prevElec) {
-      message.error(`Chỉ số ĐIỆN mới (${elecVal}) không được nhỏ hơn chỉ số cũ (${prevElec})!`);
-      return;
-    }
-    if (waterVal < prevWater) {
-      message.error(`Chỉ số NƯỚC mới (${waterVal}) không được nhỏ hơn chỉ số cũ (${prevWater})!`);
+    const validationErr = validateRoomInput(room, input);
+    if (validationErr) {
+      message.error(validationErr);
       return;
     }
 
     setSavingRoomId(room.id);
     try {
-      // B1: Ghi số điện nước
-      await axiosInstance.post('/manage/meter-readings/sync', {
-        roomId: room.id,
-        electricityValue: elecVal,
-        waterValue: waterVal
-      });
+      // B1: Ghi số điện nước (kèm cờ thay đồng hồ nếu có - T2.4)
+      await axiosInstance.post(
+        '/manage/meter-readings/sync',
+        buildMeterSyncPayload(room.id, input, currentPeriod)
+      );
 
       // B2: Tạo hóa đơn tháng
       const response = await axiosInstance.post('/invoices/generate', {
@@ -136,11 +158,10 @@ const UtilityManagement = () => {
         year: currentYear
       });
 
-      message.success(`Đã chốt số & Xuất hóa đơn thành công cho phòng ${room.roomNumber}!`);
+      message.success(`Đã chốt số & xuất hóa đơn cho phòng ${room.roomNumber}!`);
       setInvoiceResult(response.invoice);
       setQrModalVisible(true);
-      
-      // Reload dữ liệu
+
       await fetchData();
     } catch (err) {
       console.error(err);
@@ -153,9 +174,8 @@ const UtilityManagement = () => {
 
   // 2. Chốt số & Xuất Hóa Đơn Hàng loạt (Toàn bộ tòa nhà)
   const handleBulkGenerate = async () => {
-    const activeRooms = rooms.filter(r => r.buildingId === selectedBuildingId && r.status === 'occupied');
-    
-    // Lọc ra các phòng có nhập liệu đầy đủ
+    const activeRooms = rooms.filter(r => r.buildingId === selectedBuildingId && r.status === 'occupied' && !isClosed(r));
+
     const roomsToProcess = activeRooms.filter(r => {
       const input = readingsInput[r.id];
       return input?.electricity !== undefined && input?.electricity !== null &&
@@ -167,17 +187,10 @@ const UtilityManagement = () => {
       return;
     }
 
-    // Xác nhận tính chỉ số cũ/mới hợp lệ trước khi gọi API
     for (const room of roomsToProcess) {
-      const input = readingsInput[room.id];
-      const prevElec = getLatestReading(room.readings, 'electricity');
-      const prevWater = getLatestReading(room.readings, 'water');
-      if (input.electricity < prevElec) {
-        message.error(`Lỗi Phòng ${room.roomNumber}: Chỉ số Điện mới không được nhỏ hơn chỉ số cũ!`);
-        return;
-      }
-      if (input.water < prevWater) {
-        message.error(`Lỗi Phòng ${room.roomNumber}: Chỉ số Nước mới không được nhỏ hơn chỉ số cũ!`);
+      const validationErr = validateRoomInput(room, readingsInput[room.id]);
+      if (validationErr) {
+        message.error(validationErr);
         return;
       }
     }
@@ -186,19 +199,13 @@ const UtilityManagement = () => {
     let successCount = 0;
     const failed = [];
 
-    // Chạy TUẦN TỰ thay vì Promise.all: với Promise.all, một phòng lỗi sẽ làm cả lô
-    // reject ngay, nhưng các phòng đã xử lý trước đó vẫn đã ghi số và tạo hóa đơn —
-    // người dùng thấy báo lỗi, bấm lại, và sinh ra hóa đơn trùng.
     for (const room of roomsToProcess) {
       const input = readingsInput[room.id];
       try {
-        // B1: Ghi số (upsert theo kỳ — chốt lại trong tháng sẽ ghi đè, không nhân bản)
-        await axiosInstance.post('/manage/meter-readings/sync', {
-          roomId: room.id,
-          electricityValue: input.electricity,
-          waterValue: input.water
-        });
-        // B2: Tạo hóa đơn
+        await axiosInstance.post(
+          '/manage/meter-readings/sync',
+          buildMeterSyncPayload(room.id, input, currentPeriod)
+        );
         await axiosInstance.post('/invoices/generate', {
           roomId: room.id,
           month: currentMonth,
@@ -216,17 +223,15 @@ const UtilityManagement = () => {
 
     try {
       if (failed.length === 0) {
-        message.success(`Đã chốt số & Xuất hóa đơn thành công cho ${successCount} phòng!`);
+        message.success(`Đã chốt số & xuất hóa đơn cho ${successCount} phòng!`);
         setReadingsInput({});
       } else if (successCount === 0) {
         message.error(`Không chốt được phòng nào. ${failed[0].room}: ${failed[0].message}`);
       } else {
-        // Báo rõ phòng nào xong, phòng nào chưa — không nói chung chung là "thất bại"
         message.warning(
           `Đã xử lý ${successCount}/${roomsToProcess.length} phòng. ` +
           `Chưa xong: ${failed.map(f => `P.${f.room} (${f.message})`).join('; ')}`
         );
-        // Chỉ giữ lại ô nhập của các phòng chưa thành công để bấm lại
         const failedRooms = roomsToProcess
           .filter(r => failed.some(f => f.room === r.roomNumber))
           .map(r => r.id);
@@ -242,149 +247,143 @@ const UtilityManagement = () => {
     }
   };
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
-  };
+  const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
 
   // Danh sách phòng đang thuê của tòa nhà được chọn
   const filteredRooms = rooms.filter(r => r.buildingId === selectedBuildingId && r.status === 'occupied');
 
+  // Ô nhập chỉ số kèm nút quét ảnh bằng AI và tùy chọn Thay đồng hồ mới (T2.4)
+  const MeterCell = ({ room, type, prevValue, unit }) => {
+    const roomInput = readingsInput[room.id] || {};
+    const currentVal = roomInput[type];
+    const resetField = type === 'electricity' ? 'electricityReset' : 'waterReset';
+    const isReset = Boolean(roomInput[resetField]);
+    const used = computeMeterUsage(currentVal, prevValue, isReset);
+    const scanning = scanningStates[`${room.id}-${type}`];
+    const label = type === 'electricity' ? 'điện' : 'nước';
+
+    if (isClosed(room)) {
+      const cur = getCurrentReading(room.readings, type);
+      return (
+        <Space direction="vertical" size={4}>
+          <Tag color="green">Đã chốt kỳ này</Tag>
+          <span style={{ fontSize: 13 }}><b>{prevValue} → {cur ?? '?'}</b> {unit}</span>
+        </Space>
+      );
+    }
+
+    return (
+      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#64748B' }}>
+            Số cũ: <b style={{ color: '#0F172A' }}>{prevValue}</b>
+          </span>
+          <Checkbox
+            checked={isReset}
+            onChange={(e) => handleInputChange(room.id, resetField, e.target.checked)}
+            style={{ fontSize: 12 }}
+          >
+            <span style={{ fontSize: 12, color: '#475569' }}>Thay đồng hồ mới</span>
+          </Checkbox>
+        </div>
+        <Space size={6}>
+          <InputNumber
+            min={isReset ? 0 : prevValue}
+            placeholder={isReset ? 'Số mới từ 0' : 'Chỉ số mới'}
+            aria-label={`Chỉ số ${label} mới của phòng ${room.roomNumber}`}
+            value={currentVal}
+            onChange={(val) => handleInputChange(room.id, type, val)}
+            style={{ width: 120 }}
+          />
+          <Upload
+            accept="image/*"
+            showUploadList={false}
+            beforeUpload={(file) => {
+              handleMeterUpload(room.id, type, file);
+              return false;
+            }}
+          >
+            <Tooltip title={`Quét số ${label} từ ảnh bằng AI`}>
+              <Button
+                shape="circle"
+                aria-label={`Quét số ${label} phòng ${room.roomNumber}`}
+                icon={<Camera size={15} />}
+                loading={scanning}
+              />
+            </Tooltip>
+          </Upload>
+        </Space>
+        {isReset && (
+          <Input
+            size="small"
+            prefix={<RotateCcw size={12} style={{ color: '#64748B' }} aria-hidden="true" />}
+            placeholder="Lý do thay đồng hồ (>= 5 ký tự)"
+            aria-label={`Lý do thay đồng hồ phòng ${room.roomNumber}`}
+            value={roomInput.resetReason || ''}
+            onChange={(e) => handleInputChange(room.id, 'resetReason', e.target.value)}
+          />
+        )}
+        {used !== null && used >= 0 && (
+          <Tag color={isReset ? 'geekblue' : 'cyan'}>
+            {isReset ? `Đồng hồ mới: dùng ${used} ${unit}` : `Dùng ${used} ${unit}`}
+          </Tag>
+        )}
+      </Space>
+    );
+  };
+
   const columns = [
+    { title: 'Phòng', dataIndex: 'roomNumber', key: 'roomNumber', width: 90, render: (text) => <b>P.{text}</b> },
     {
-      title: 'PHÒNG TRỌ',
-      dataIndex: 'roomNumber',
-      key: 'roomNumber',
-      render: (text) => <strong>Phòng {text}</strong>
-    },
-    {
-      title: 'KHÁCH THUÊ',
+      title: 'Khách thuê',
       key: 'tenant',
+      width: 170,
       render: (_, record) => {
         const contract = record.contracts?.[0];
         return (
           <div>
-            <div><strong>{contract?.tenant ? contract.tenant.name : 'N/A'}</strong></div>
-            {contract?.tenant && <small style={{ color: '#8c8c8c' }}>{contract.tenant.phone}</small>}
+            <div style={{ fontWeight: 600, color: '#0F172A' }}>{contract?.tenant ? contract.tenant.name : 'N/A'}</div>
+            {contract?.tenant && <div style={{ fontSize: 12, color: '#64748B' }}>{contract.tenant.phone}</div>}
           </div>
         );
       }
     },
     {
-      title: 'ĐIỆN TIÊU THỤ (kWh)',
+      title: 'Điện tiêu thụ (kWh)',
       key: 'electricity',
-      render: (_, record) => {
-        const prevElec = getLatestReading(record.readings, 'electricity');
-        const currentVal = readingsInput[record.id]?.electricity;
-        const used = (currentVal !== undefined && currentVal >= prevElec) ? (currentVal - prevElec) : 0;
-
-        return (
-          <Space direction="vertical" size={2}>
-            <div><small style={{ color: '#8c8c8c' }}>Số cũ: {prevElec}</small></div>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <InputNumber 
-                min={prevElec} 
-                placeholder="Chỉ số mới" 
-                value={readingsInput[record.id]?.electricity}
-                onChange={(val) => handleInputChange(record.id, 'electricity', val)}
-                style={{ width: '100px', borderRadius: '6px' }}
-              />
-              <Upload
-                accept="image/*"
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  handleMeterUpload(record.id, 'electricity', file);
-                  return false;
-                }}
-              >
-                <Tooltip title="Chụp/Quét số điện bằng AI">
-                  <Button 
-                    type="dashed" 
-                    shape="circle" 
-                    icon={<Camera size={14} />} 
-                    loading={scanningStates[`${record.id}-electricity`]}
-                    style={{ 
-                      borderColor: '#10b981', 
-                      color: '#10b981',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }} 
-                  />
-                </Tooltip>
-              </Upload>
-            </div>
-            {used > 0 && <Tag color="blue">Dùng: {used} số</Tag>}
-          </Space>
-        );
-      }
+      width: 245,
+      render: (_, record) => (
+        <MeterCell room={record} type="electricity" prevValue={getLatestReading(record.readings, 'electricity')} unit="kWh" />
+      )
     },
     {
-      title: 'NƯỚC TIÊU THỤ (m³)',
+      title: 'Nước tiêu thụ (m³)',
       key: 'water',
-      render: (_, record) => {
-        const prevWater = getLatestReading(record.readings, 'water');
-        const currentVal = readingsInput[record.id]?.water;
-        const used = (currentVal !== undefined && currentVal >= prevWater) ? (currentVal - prevWater) : 0;
-
-        return (
-          <Space direction="vertical" size={2}>
-            <div><small style={{ color: '#8c8c8c' }}>Số cũ: {prevWater}</small></div>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <InputNumber 
-                min={prevWater} 
-                placeholder="Chỉ số mới" 
-                value={readingsInput[record.id]?.water}
-                onChange={(val) => handleInputChange(record.id, 'water', val)}
-                style={{ width: '100px', borderRadius: '6px' }}
-              />
-              <Upload
-                accept="image/*"
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  handleMeterUpload(record.id, 'water', file);
-                  return false;
-                }}
-              >
-                <Tooltip title="Chụp/Quét số nước bằng AI">
-                  <Button 
-                    type="dashed" 
-                    shape="circle" 
-                    icon={<Camera size={14} />} 
-                    loading={scanningStates[`${record.id}-water`]}
-                    style={{ 
-                      borderColor: '#10b981', 
-                      color: '#10b981',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }} 
-                  />
-                </Tooltip>
-              </Upload>
-            </div>
-            {used > 0 && <Tag color="cyan">Dùng: {used} khối</Tag>}
-          </Space>
-        );
-      }
+      width: 245,
+      render: (_, record) => (
+        <MeterCell room={record} type="water" prevValue={getLatestReading(record.readings, 'water')} unit="m³" />
+      )
     },
     {
-      title: 'TIỀN PHÒNG',
+      title: 'Tiền phòng',
       dataIndex: 'price',
       key: 'price',
+      width: 140,
       render: (price) => <b>{formatVND(price)}</b>
     },
     {
-      title: 'HÀNH ĐỘNG',
+      title: 'Hành động',
       key: 'action',
+      width: 160,
       render: (_, record) => (
-        <Button 
-          type="primary" 
-          icon={<Calculator size={14} />} 
+        <Button
+          type="primary"
+          icon={<Calculator size={15} />}
           loading={savingRoomId === record.id}
-          style={{ background: '#10b981', border: 'none', borderRadius: '6px' }}
+          disabled={isClosed(record)}
           onClick={() => handleSaveAndGenerateInvoice(record)}
         >
-          Lưu & Xuất HĐ
+          Lưu &amp; xuất HĐ
         </Button>
       )
     }
@@ -392,90 +391,80 @@ const UtilityManagement = () => {
 
   return (
     <div>
-      {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: 'bold' }}>QUẢN LÝ / TIỆN ÍCH</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#1a3353', margin: 0 }}>Chốt số điện nước & Xuất hóa đơn hàng loạt</h1>
-        </div>
-        <Space>
-          <div style={{ fontWeight: '600', color: '#64748b' }}>Chọn tòa nhà vận hành:</div>
-          <Select
-            value={selectedBuildingId}
-            style={{ width: 220 }}
-            loading={loading}
-            onChange={(val) => {
-              setSelectedBuildingId(val);
-              setReadingsInput({});
-            }}
-            placeholder="Chọn tòa nhà"
-          >
-            {buildings.map(b => (
-              <Select.Option key={b.id} value={b.id}>
-                {b.name}
-              </Select.Option>
-            ))}
-          </Select>
-        </Space>
-      </div>
-
-      <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <span style={{ fontWeight: 'bold', color: '#1a3353' }}>Chu kỳ hóa đơn: Tháng {currentMonth}/{currentYear}</span>
-            <span style={{ color: '#8c8c8c', marginLeft: '12px' }}>•  Chỉ hiển thị các phòng đang hoạt động (có khách thuê).</span>
+      <PageHeader
+        title="Chốt số điện nước"
+        description={`Chu kỳ hóa đơn tháng ${currentMonth}/${currentYear}. Chỉ hiển thị các phòng đang có khách thuê.`}
+        onRefresh={fetchData}
+        refreshLoading={loading}
+        extra={
+          <div className="toolbar-wrap">
+            <DatePicker
+              picker="month"
+              format="MM/YYYY"
+              aria-label="Kỳ chốt số"
+              allowClear={false}
+              value={periodDate}
+              onChange={(d) => {
+                if (!d) return;
+                setPeriodDate(d.startOf('month'));
+                setReadingsInput({});
+              }}
+            />
+            <Select
+              aria-label="Chọn tòa nhà"
+              value={selectedBuildingId}
+              style={{ minWidth: 220 }}
+              loading={loading}
+              onChange={(val) => {
+                setSelectedBuildingId(val);
+                setReadingsInput({});
+              }}
+              placeholder="Chọn tòa nhà"
+              options={buildings.map(b => ({ value: b.id, label: b.name }))}
+            />
+            <Button
+              type="primary"
+              icon={<Save size={16} />}
+              loading={bulkSaving}
+              disabled={filteredRooms.length === 0}
+              onClick={handleBulkGenerate}
+            >
+              Chốt toàn bộ tòa nhà
+            </Button>
           </div>
-          <Button 
-            type="primary" 
-            icon={<Save size={16} />} 
-            loading={bulkSaving}
-            disabled={filteredRooms.length === 0}
-            style={{ background: '#1a3353', border: 'none', height: '40px', borderRadius: '8px', fontWeight: 'bold' }}
-            onClick={handleBulkGenerate}
-          >
-            Ghi số & Xuất HĐ toàn bộ tòa nhà
-          </Button>
-        </div>
+        }
+      />
 
+      <Card styles={{ body: { padding: filteredRooms.length > 0 ? 0 : 24 } }}>
         {filteredRooms.length > 0 ? (
-          <Table 
-            columns={columns} 
-            dataSource={filteredRooms} 
-            rowKey="id" 
+          <Table
+            columns={columns}
+            dataSource={filteredRooms}
+            rowKey="id"
             loading={loading}
             pagination={false}
-            scroll={{ x: true }}
+            scroll={{ x: 1000 }}
           />
         ) : (
-          <Alert 
-            message="Không có phòng đang được thuê" 
-            description="Tòa nhà này hiện tại chưa có phòng nào được thuê hoặc không có phòng nào có hợp đồng đang hoạt động." 
-            type="warning" 
-            showIcon 
-            style={{ borderRadius: '8px' }}
+          <Alert
+            type="warning"
+            showIcon
+            message="Không có phòng đang được thuê"
+            description="Tòa nhà này chưa có phòng nào được thuê hoặc không có hợp đồng đang hoạt động."
           />
         )}
       </Card>
 
       {/* MODAL KẾT QUẢ XUẤT HÓA ĐƠN CHI TIẾT */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#10b981' }}><CheckCircle2 size={20} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Xuất Hóa Đơn & Gửi Telegram thành công</span>}
+        title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><CheckCircle2 size={20} color="#15803D" aria-hidden="true" /> Đã xuất hóa đơn &amp; gửi Telegram</span>}
         open={qrModalVisible}
         onCancel={() => setQrModalVisible(false)}
         footer={[
-          <Button 
-            key="financials" 
-            type="default" 
-            icon={<ArrowRight size={14} />} 
-            onClick={() => {
-              setQrModalVisible(false);
-              navigate('/landlord/financials');
-            }} 
-            style={{ borderRadius: '8px', fontWeight: 'bold' }}
-          >
-            Thống kê Doanh thu
+          <Button key="financials" icon={<ArrowRight size={15} />} onClick={() => { setQrModalVisible(false); navigate('/landlord/financials'); }}>
+            Thống kê doanh thu
           </Button>,
-          <Button key="close" type="primary" onClick={() => setQrModalVisible(false)} style={{ background: '#1a3353', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>
+          <Button key="close" type="primary" onClick={() => setQrModalVisible(false)}>
             Đóng
           </Button>
         ]}
@@ -483,26 +472,23 @@ const UtilityManagement = () => {
         centered
       >
         {invoiceResult && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '15px 0' }}>
-            <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>Tổng số tiền hóa đơn</div>
-            <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444', marginBottom: '16px' }}>
-              {formatVND(invoiceResult.total)}
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0' }}>
+            <div style={{ fontSize: 13, color: '#475569' }}>Tổng số tiền hóa đơn</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: '#DC2626', marginBottom: 16 }}>{formatVND(invoiceResult.total)}</div>
 
-            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
-              <img 
-                src={invoiceResult.qrCode} 
-                alt="SePay VietQR Code" 
-                style={{ width: '220px', height: '220px', display: 'block', borderRadius: '8px' }}
+            <div style={{ background: '#F8FAFC', padding: 12, borderRadius: 12, border: '1px solid #E2E8F0', marginBottom: 16 }}>
+              <img
+                src={invoiceResult.qrCode}
+                alt={`Mã VietQR thanh toán hóa đơn ${formatVND(invoiceResult.total)}`}
+                style={{ width: 220, height: 220, display: 'block', borderRadius: 8 }}
               />
             </div>
-            
-            <Alert 
-              message="Đã gửi Telegram & Tích hợp SePay tự động"
-              description="Thông báo kèm mã VietQR đã được gửi tới khách thuê. Khi khách quét QR thanh toán, SePay sẽ tự động gạch nợ hóa đơn và cập nhật doanh thu cho bạn."
+
+            <Alert
               type="success"
               showIcon
-              style={{ borderRadius: '8px', width: '100%' }}
+              message="Đã gửi Telegram & tích hợp SePay"
+              description="Thông báo kèm mã VietQR đã được gửi tới khách thuê. Khi khách quét QR thanh toán, SePay tự động gạch nợ và cập nhật doanh thu."
             />
           </div>
         )}

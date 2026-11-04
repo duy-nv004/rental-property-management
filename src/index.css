@@ -1,10 +1,854 @@
-body {
-  margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-  background-color: #f5f5f5; /* Màu nền nhạt cho toàn trang */
+:root {
+  --color-primary: #0F766E;
+  --color-primary-soft: #F0FDFA;
+  --color-text: #0F172A;
+  --color-text-muted: #475569;
+  --color-border: #E2E8F0;
+  --color-bg: #F6F8FA;
+  --color-surface: #FFFFFF;
+  --header-height: 64px;
+  --color-sidebar: #0B1220;
+  --font-sans: 'Be Vietnam Pro', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 12px 32px rgba(15, 23, 42, 0.06);
+  /* Nền tối dùng chung cho hero / thẻ gói / banner đăng nhập */
+  --gradient-hero:
+    radial-gradient(120% 120% at 100% 0%, rgba(20, 184, 166, 0.28) 0%, transparent 55%),
+    radial-gradient(90% 90% at 0% 100%, rgba(3, 105, 161, 0.22) 0%, transparent 60%),
+    linear-gradient(150deg, #0B1220 0%, #0F2A2E 100%);
 }
 
-#root {
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root { min-height: 100vh; }
+
+/* Focus ring rõ ràng cho bàn phím */
+:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* Card / bảng: viền mảnh + bóng nhẹ cho cảm giác nổi khối */
+.ant-card { box-shadow: var(--shadow-sm); }
+.ant-card .ant-card-head { border-bottom-color: #EDF1F5; }
+.ant-card .ant-card-head-title { font-weight: 700; letter-spacing: -0.2px; }
+.ant-table-wrapper .ant-table-thead > tr > th {
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.ant-tag { border-radius: 999px; font-weight: 600; padding-inline: 10px; }
+.ant-btn-primary:not(:disabled):not(.btn-warning):not(.btn-dark):not(.btn-success):not(.ant-btn-dangerous) {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 100%);
+}
+.ant-modal .ant-modal-content { border-radius: 18px; }
+
+/* Sidebar */
+.app-sidebar {
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-sidebar);
+  background-image: radial-gradient(140% 50% at 0% 0%, rgba(20, 184, 166, 0.12) 0%, transparent 60%);
+  padding: 20px 0 16px;
+}
+.app-brand { display: flex; align-items: center; gap: 12px; padding: 0 24px 24px; }
+.app-brand-mark {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #14B8A6 0%, #0F766E 100%); color: #fff; flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.app-brand-name { font-weight: 800; font-size: 16px; letter-spacing: -0.2px; color: var(--color-text); }
+.app-brand-sub { font-size: 11px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.app-sidebar .app-brand-name { color: #fff; }
+.app-sidebar .app-brand-sub { color: #7C8BA1; }
+.app-sidebar-label { padding: 0 28px 8px; font-size: 11px; font-weight: 600; color: #5B6B82; text-transform: uppercase; letter-spacing: 1px; }
+.app-sidebar-scroll { flex: 1; overflow-y: auto; }
+.app-menu.ant-menu { border-inline-end: none !important; font-weight: 500; background: transparent; }
+.app-menu .ant-menu-item-selected { font-weight: 600; }
+/* Vạch nhấn bên trái cho mục đang chọn */
+.app-menu .ant-menu-item { position: relative; }
+.app-menu .ant-menu-item-selected::before {
+  content: ''; position: absolute; left: 0; top: 10px; bottom: 10px;
+  width: 3px; border-radius: 0 3px 3px 0; background: #2DD4BF;
+}
+.app-menu-footer.ant-menu { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 8px; }
+
+/* Header */
+.app-header {
+  height: var(--header-height);
+  padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky; top: 0; z-index: 99;
+}
+.app-header-greeting { color: var(--color-text-muted); font-size: 14px; }
+.app-header-greeting b { color: var(--color-text); font-weight: 700; }
+.app-user {
+  display: flex; align-items: center; gap: 10px; padding: 4px 8px;
+  border: none; background: transparent; border-radius: 10px; cursor: pointer; font: inherit;
+  transition: background-color 0.15s ease;
+}
+.app-user:hover { background: #F1F5F9; }
+.app-user-name { font-weight: 600; font-size: 14px; color: var(--color-text); line-height: 1.2; text-align: right; }
+.app-user-role { font-size: 12px; color: var(--color-text-muted); line-height: 1.2; text-align: right; }
+
+/* Nút icon, vùng chạm 40x40 */
+.icon-btn {
+  width: 40px; height: 40px; display: inline-grid; place-items: center;
+  border: none; border-radius: 10px; background: transparent;
+  color: var(--color-text-muted); cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.icon-btn:hover { background: #F1F5F9; color: var(--color-text); }
+.icon-btn.danger { color: #DC2626; }
+
+/* Thông báo */
+.notif-item {
+  display: block; width: 100%; text-align: left; padding: 10px 12px;
+  border: none; border-radius: 8px; background: transparent; cursor: pointer; font: inherit;
+  transition: background-color 0.15s ease;
+}
+.notif-item:hover { background: #F8FAFC; }
+.notif-item.unread { background: var(--color-primary-soft); }
+
+/* Bottom nav (tenant mobile) */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(64px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(255, 255, 255, 0.94); backdrop-filter: saturate(180%) blur(10px);
+  border-top: 1px solid var(--color-border); box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.05);
+  display: flex; z-index: 100;
+}
+.bottom-nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: none; background: transparent; color: #64748B;
+  font: inherit; font-size: 11px; font-weight: 500; cursor: pointer;
+  transition: color 0.15s ease;
+}
+.bottom-nav-item.active { color: var(--color-primary); font-weight: 700; }
+
+/* Thẻ số liệu & card */
+.stat-card { height: 100%; transition: box-shadow 0.2s ease, transform 0.2s ease; }
+.stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.stat-label { font-size: 13px; font-weight: 500; color: var(--color-text-muted); }
+.stat-value { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: var(--color-text); margin-top: 6px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: 12px; color: #64748B; margin-top: 4px; }
+.stat-icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04); }
+.card-title { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.callout { display: flex; align-items: center; gap: 16px; padding: 16px; border-radius: 12px; background: var(--color-primary-soft); border: 1px solid #CCFBF1; margin-top: 4px; }
+.callout-value { width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; background: var(--color-primary); color: #fff; font-weight: 800; font-size: 18px; flex-shrink: 0; }
+
+/* Thẻ gói dịch vụ hiện tại */
+.plan-current.ant-card {
+  background: var(--gradient-hero);
+  border: none;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+.plan-crown {
+  width: 46px; height: 46px; border-radius: 14px;
+  display: grid; place-items: center; flex-shrink: 0;
+  background: rgba(20, 184, 166, 0.18);
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  color: #5EEAD4;
+}
+.plan-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #E2E8F0; font-size: 13px; line-height: 1.4;
+}
+.plan-limits {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+/* ===== Trang người thuê ===== */
+
+/* Hero giới thiệu */
+.hero {
+  border-radius: 16px;
+  padding: 28px;
+  background: var(--gradient-hero);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 24px;
+}
+.hero-title { font-size: clamp(20px, 3vw, 25px); font-weight: 800; letter-spacing: -0.5px; margin: 0 0 8px; line-height: 1.3; }
+.hero-desc { color: #CBD5E1; margin: 0; max-width: 560px; font-size: 14px; line-height: 1.6; }
+.hero-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.hero-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #E2E8F0; font-size: 13px; line-height: 1.4;
+}
+.hero-chip strong { color: #fff; font-weight: 700; }
+.hero-chip svg { color: #5EEAD4; flex-shrink: 0; }
+
+/* Ô icon nhỏ trong danh sách */
+.info-icon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: #F1F5F9; color: var(--color-text-muted);
+}
+.info-icon.accent { background: var(--color-primary-soft); color: var(--color-primary); }
+
+/* Dòng nhãn – giá trị */
+.kv-list { display: grid; gap: 2px; }
+.kv-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  padding: 10px 0; border-bottom: 1px dashed var(--color-border); font-size: 13.5px;
+}
+.kv-row:last-child { border-bottom: none; }
+.kv-label { color: #64748B; flex-shrink: 0; }
+.kv-value { font-weight: 600; color: var(--color-text); text-align: right; min-width: 0; }
+
+/* Dòng dịch vụ kèm đơn giá */
+.service-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 12px;
+}
+.service-row + .service-row { margin-top: 10px; }
+.service-name { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13.5px; min-width: 0; }
+.service-price { font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+
+/* Số tiền */
+.amount { font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -0.4px; }
+.amount-lg { font-size: 26px; line-height: 1.2; }
+
+/* Khối ký xác nhận */
+.sign-box {
+  border: 1px dashed var(--color-border); border-radius: 12px;
+  padding: 16px; background: #F8FAFC; text-align: center;
+}
+.sign-box img { max-height: 110px; display: block; margin: 0 auto 8px; }
+.sign-box-empty { color: #94A3B8; font-size: 13px; padding: 24px 0; }
+
+/* Mã hợp đồng / mã hóa đơn */
+.code-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; font-weight: 600;
+  background: #F1F5F9; color: var(--color-text-muted);
+  padding: 3px 9px; border-radius: 6px;
+}
+
+/* Vòng xoay chờ xác nhận thanh toán */
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Khung trang người thuê */
+.page-shell { display: grid; gap: 20px; }
+.page-shell > .hero { margin-bottom: 0; }
+.page-shell-tight { max-width: 600px; margin: 0 auto; }
+/* Trang 2 cột (hồ sơ, báo sự cố): đủ rộng để mỗi cột không bị bóp hẹp */
+.page-shell-wide { max-width: 1100px; margin: 0 auto; width: 100%; }
+.loading-center { min-height: 60vh; display: grid; place-items: center; }
+
+/* Danh thiếp người dùng (trang hồ sơ cá nhân) */
+.profile-id { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.profile-avatar.ant-avatar { margin-bottom: 14px; background: #F1F5F9; color: var(--color-primary); border: 3px solid #E2E8F0; }
+.profile-name { margin: 0 0 8px; font-size: 18px; font-weight: 800; color: var(--color-text); letter-spacing: -0.3px; }
+.profile-role {
+  display: inline-block; padding: 4px 12px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.6px;
+  color: var(--color-text-muted); background: #F8FAFC; border: 1px solid var(--color-border);
+}
+
+/* Trạng thái đã liên kết (Telegram) */
+.status-ok {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: 10px;
+  background: #F0FDF4; border: 1px solid #BBF7D0;
+}
+.status-ok > svg { flex-shrink: 0; }
+.status-ok-text { font-size: 13px; font-weight: 600; color: #15803D; min-width: 0; overflow-wrap: anywhere; }
+
+/* Danh sách yêu cầu sửa chữa của người thuê */
+.support-item { align-items: flex-start; }
+.support-main { min-width: 0; flex: 1 1 auto; }
+.support-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.support-meta { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #64748B; }
+.support-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.support-desc { margin-top: 8px; font-size: 14px; color: var(--color-text); overflow-wrap: anywhere; }
+
+/* Thẻ số liệu người thuê */
+.stat-card-tight.ant-card .ant-card-body { padding: 18px 20px; }
+.stat-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.stat-head-main { min-width: 0; }
+.stat-value-sm { font-size: 22px; }
+.text-danger { color: #DC2626; }
+.text-ok { color: var(--color-primary); }
+.text-neutral { color: var(--color-text); }
+.stat-icon.danger { background: #FEF2F2; color: #DC2626; }
+.stat-icon.ok { background: var(--color-primary-soft); color: var(--color-primary); }
+.stat-icon.neutral { background: #F1F5F9; color: #475569; }
+.stat-action { margin-top: 16px; }
+
+/* Danh sách dạng dòng */
+.list-stack { display: grid; gap: 8px; }
+.list-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 12px 14px; text-align: left;
+  border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.list-row[role='button'] { cursor: pointer; }
+.list-row:hover { border-color: #99F6E4; background: var(--color-primary-soft); }
+.list-row-static { padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 12px; }
+.list-row-main { min-width: 0; }
+.list-row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.list-row-title { font-weight: 600; font-size: 14px; margin: 0; }
+.list-row-sub { font-size: 12.5px; color: #64748B; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Tiêu đề card kèm nút hành động */
+.card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.card-title-text { font-weight: 700; }
+.link-accent.ant-btn { padding: 0; height: auto; color: var(--color-primary); font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+.link-accent.ant-btn:hover { color: #0D9488; }
+.tag-flat { margin-inline-end: 0; border-radius: 999px; font-weight: 600; font-size: 12px; }
+
+/* Danh bạ liên hệ */
+.contact-list { display: grid; gap: 10px; margin-top: 14px; }
+.contact-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; min-width: 0; }
+.contact-break { min-width: 0; overflow-wrap: anywhere; }
+
+/* Khối trống / ghi chú */
+.empty-card.ant-card { max-width: 560px; margin: 0 auto; text-align: center; }
+.empty-title { font-size: 18px; font-weight: 700; margin: 18px 0 8px; letter-spacing: -0.3px; }
+.empty-desc { color: var(--color-text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 20px; }
+.empty-note { text-align: left; background: #F8FAFC; border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; }
+.empty-note-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.empty-note-row { font-size: 13.5px; color: var(--color-text-muted); }
+.empty-note-row + .empty-note-row { margin-top: 4px; }
+.empty-inline { text-align: center; padding-top: 4px; }
+.empty-inline-text { color: #64748B; font-size: 13.5px; margin: 0 0 14px; }
+
+/* Cảnh báo trong trang */
+.alert-block.ant-alert { border-radius: 12px; align-items: flex-start; }
+.alert-block .ant-alert-message { font-weight: 700; }
+.alert-block .ant-alert-description { line-height: 1.6; }
+
+/* Nút phụ trợ */
+.btn-warning.ant-btn-primary { background: #D97706; box-shadow: none; }
+.btn-warning.ant-btn-primary:not(:disabled):hover { background: #B45309; }
+.btn-dark.ant-btn-primary { background: #0F172A; box-shadow: none; }
+.btn-dark.ant-btn-primary:not(:disabled):hover { background: #1E293B; }
+
+/* Bản hợp đồng dạng văn bản in */
+.printable-contract {
+  padding: 24px; background: #fff; border: 1px solid var(--color-border);
+  border-radius: 8px; color: #1E293B; line-height: 1.8; font-family: serif; font-size: 15px;
+}
+
+/* Số tiền cỡ vừa */
+.amount-md { font-size: 19px; }
+
+/* Thẻ hóa đơn */
+.invoice-item {
+  padding: 16px; border: 1px solid var(--color-border); border-left: 4px solid var(--color-border);
+  border-radius: 14px; background: var(--color-surface);
+}
+.invoice-item.is-paid { border-left-color: #10B981; }
+.invoice-item.is-unpaid { border-left-color: #EF4444; }
+.invoice-meta { font-size: 11.5px; color: #94A3B8; }
+.list-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.list-actions .ant-btn { flex: 0 0 auto; }
+
+/* Tóm tắt trong modal */
+.modal-summary { text-align: center; margin-bottom: 20px; }
+
+/* Khung mã QR */
+.qr-modal { display: flex; flex-direction: column; align-items: center; padding: 8px 0; }
+.qr-box {
+  background: #F8FAFC; border: 1px solid var(--color-border);
+  border-radius: 16px; padding: 12px; margin-bottom: 16px;
+}
+.qr-box img { width: 220px; height: 220px; display: block; border-radius: 8px; }
+
+/* Khối hướng dẫn thanh toán */
+.guide-box { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 12px; padding: 14px 16px; width: 100%; }
+.guide-box-title {
+  font-size: 11px; text-transform: uppercase; font-weight: 700;
+  color: #1E40AF; letter-spacing: 0.5px; margin-bottom: 8px;
+}
+.guide-box ol { margin: 0; padding-left: 18px; font-size: 13px; color: #1E3A8A; line-height: 1.6; }
+
+/* Nút phụ trợ (tiếp) */
+.btn-success.ant-btn-primary { background: #10B981; box-shadow: none; }
+.btn-success.ant-btn-primary:not(:disabled):hover { background: #059669; }
+
+/* Trang xác thực */
+.auth-page { display: flex; min-height: 100vh; background: var(--color-surface); }
+.auth-banner {
+  flex: 1.1;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 48px;
+  padding: 56px;
+  background: var(--gradient-hero);
+  color: #fff;
+}
+.auth-brand { display: flex; align-items: center; gap: 12px; }
+.auth-brand .app-brand-mark { background: #14B8A6; }
+.auth-brand-name { font-weight: 800; font-size: 17px; }
+.auth-brand-sub { font-size: 11px; color: #99F6E4; text-transform: uppercase; letter-spacing: 1.5px; }
+.auth-heading { font-size: clamp(30px, 3vw, 40px); font-weight: 800; line-height: 1.2; letter-spacing: -0.5px; margin: 0 0 16px; max-width: 520px; text-wrap: balance; }
+.auth-desc { color: #CBD5E1; font-size: 16px; line-height: 1.65; max-width: 480px; margin: 0 0 28px; }
+.auth-features { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; color: #E2E8F0; font-size: 15px; }
+.auth-features li { display: flex; align-items: center; gap: 10px; }
+.auth-features svg { color: #5EEAD4; flex-shrink: 0; }
+.auth-footer { display: flex; justify-content: space-between; font-size: 12px; color: #94A3B8; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px; }
+.auth-form-col { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 24px; }
+.auth-form-box { width: 100%; max-width: 400px; }
+.auth-mobile-brand { display: none; align-items: center; gap: 10px; margin-bottom: 32px; }
+.auth-title { font-size: 28px; font-weight: 800; letter-spacing: -0.4px; margin: 0 0 6px; color: var(--color-text); }
+.auth-subtitle { color: var(--color-text-muted); font-size: 14px; margin: 0 0 28px; }
+.auth-links { display: flex; justify-content: space-between; margin: -4px 0 20px; }
+.auth-switch { text-align: center; color: var(--color-text-muted); font-size: 14px; margin-top: 20px; }
+
+/* Nút dạng liên kết */
+.link-btn {
+  border: none; background: none; padding: 4px 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--color-primary);
+}
+.link-btn:hover { text-decoration: underline; }
+.link-btn.danger { color: #DC2626; }
+
+/* Header trang Admin/Landlord/Tenant */
+.page-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 24px;
+}
+.page-header-main { flex: 1 1 260px; min-width: 0; }
+.page-header-title {
+  font-size: clamp(22px, 4vw, 28px); font-weight: 800; color: #0F172A;
+  margin: 0 0 6px 0; letter-spacing: -0.6px; line-height: 1.25; text-wrap: balance;
+}
+.page-header-desc { color: #64748B; margin: 0; font-size: 14px; line-height: 1.5; }
+.page-header-actions {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0;
+}
+.page-header-actions .ant-btn {
+  border-radius: 8px; height: 38px; font-weight: 600; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+/* ===== TENANT CONTRACT (document view) ===== */
+.page-shell-doc { max-width: 900px; margin: 0 auto; }
+
+.doc-card.ant-card { position: relative; }
+.doc-card.ant-card .ant-card-body { padding: 26px; }
+
+.doc-status { position: absolute; top: 22px; right: 26px; }
+.tag-icon { display: inline-flex; align-items: center; gap: 5px; }
+
+.doc-head { display: flex; align-items: center; gap: 14px; padding-right: 150px; min-width: 0; }
+.doc-head-main { min-width: 0; }
+.doc-title { font-size: 19px; font-weight: 800; letter-spacing: -0.4px; margin: 0 0 6px; color: var(--color-text); }
+.doc-divider.ant-divider { margin: 22px 0; }
+
+.doc-section { margin-bottom: 28px; }
+.doc-section-last { margin-bottom: 0; }
+.section-title {
+  font-size: 14.5px; font-weight: 700; letter-spacing: -0.2px;
+  margin: 0 0 14px; color: var(--color-text);
+}
+
+.party-box {
+  height: 100%; padding: 14px 16px; border-radius: 12px;
+  background: #F8FAFC; border: 1px solid var(--color-border);
+}
+.party-role { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+.party-role.landlord { color: var(--color-primary); }
+.party-role.tenant { color: #7C3AED; }
+.party-name { font-weight: 700; font-size: 15px; color: var(--color-text); margin-bottom: 4px; overflow-wrap: anywhere; }
+.party-meta { font-size: 13px; color: #64748B; line-height: 1.6; overflow-wrap: anywhere; }
+
+.info-cell {
+  height: 100%; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--color-border); background: #fff;
+}
+.info-label { font-size: 11.5px; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.info-value { font-weight: 700; font-size: 14.5px; color: var(--color-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+.price-table { border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; }
+.price-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; background: #F8FAFC; border-bottom: 1px solid var(--color-border);
+  font-size: 11.5px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.6px;
+}
+.price-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 16px; font-size: 14px;
+}
+.price-row + .price-row { border-top: 1px solid var(--color-border); }
+.price-name { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--color-text); min-width: 0; }
+.price-name svg { color: var(--color-primary); flex-shrink: 0; }
+.price-value {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap;
+}
+.price-note { font-size: 11.5px; font-weight: 500; color: #94A3B8; }
+
+.rule-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.rule-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; color: var(--color-text-muted); line-height: 1.6; }
+.rule-item svg { color: var(--color-primary); flex-shrink: 0; margin-top: 3px; }
+
+.sign-role { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #64748B; margin-bottom: 10px; }
+.sign-image { display: flex; justify-content: center; }
+.sign-status { font-size: 12.5px; font-weight: 600; color: #64748B; }
+.sign-status.ok { color: var(--color-primary); }
+.sign-name { font-weight: 700; font-size: 14.5px; color: var(--color-text); margin-top: 10px; }
+.sign-box.is-pending { border-style: dashed; border-color: #FCD34D; background: #FFFBEB; }
+.sign-pending { padding: 6px 0 2px; }
+.sign-pending-text { font-size: 13.5px; color: #92400E; margin: 0 0 12px; line-height: 1.6; }
+.sign-pending-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.modal-title-danger { display: inline-flex; align-items: center; gap: 8px; color: #DC2626; font-weight: 700; }
+.modal-note { font-size: 13.5px; color: var(--color-text-muted); line-height: 1.65; margin: 0 0 14px; }
+
+@media (max-width: 991px) {
+  .auth-banner { display: none; }
+  .auth-mobile-brand { display: flex; }
+}
+
+@media (max-width: 640px) {
+  .page-header { margin-bottom: 18px; }
+  .page-header-actions { width: 100%; flex-shrink: 1; }
+  .page-header-actions > .ant-btn { flex: 1 1 auto; }
+  .page-shell { gap: 16px; }
+  .hero { padding: 22px 20px; }
+  .stat-value-sm { font-size: 20px; }
+  .alert-block.ant-alert { padding: 12px; }
+  .stat-card-tight.ant-card .ant-card-body { padding: 16px; }
+  .invoice-item { padding: 14px; }
+  .invoice-item .list-actions .ant-btn { flex: 1 1 auto; }
+  .qr-box img { width: 100%; max-width: 240px; height: auto; aspect-ratio: 1; }
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-width: 767px) {
+  .app-header { padding: 0 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Quản lý tòa nhà (landlord/BuildingManager) ─────────────────────────── */
+.modal-title { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--color-text); }
+.modal-form { margin-top: 16px; }
+.building-card.ant-card { height: 100%; overflow: hidden; }
+.building-cover { height: 180px; width: 100%; object-fit: cover; cursor: pointer; }
+.building-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.building-name { margin: 0 0 6px; padding: 0; border: 0; background: none; text-align: left; font: inherit; font-size: 16px; font-weight: 800; color: var(--color-text); cursor: pointer; }
+.building-name:hover, .building-name:focus-visible { color: var(--color-primary); }
+.building-addr { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; font-size: 13px; color: var(--color-text-muted); min-width: 0; }
+.building-addr > svg { flex-shrink: 0; }
+.building-addr > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.building-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 12px; margin-bottom: 14px; border-radius: 10px; background: #F8FAFC; border: 1px solid var(--color-border); }
+.building-stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: #64748B; }
+.building-stat-value { font-size: 13.5px; font-weight: 700; color: var(--color-text); }
+.building-actions { display: grid; gap: 8px; }
+.back-link.ant-btn { padding: 0; margin-bottom: 6px; font-weight: 700; }
+.addr-line { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; color: var(--color-text-muted); }
+
+/* Sơ đồ phòng */
+.matrix-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.matrix-title { margin: 0; font-size: 18px; font-weight: 800; color: var(--color-text); letter-spacing: -0.3px; }
+.matrix-sub { margin-top: 4px; font-size: 13.5px; color: var(--color-text-muted); }
+.matrix-empty { padding: 40px 0; text-align: center; }
+
+/* Ô tổng quan = bộ lọc trạng thái */
+.room-page-header.page-header { align-items: center; margin-bottom: 0; }
+.room-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 0 1 auto; }
+.summary-tile { --tile-accent: #475569; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--color-border); background: #fff; color: var(--tile-accent); font: inherit; white-space: nowrap; cursor: pointer; transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease; }
+.summary-tile:hover { box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08); }
+.summary-tile:focus-visible { outline: 2px solid var(--tile-accent); outline-offset: 2px; }
+.summary-tile.is-active { border-color: var(--tile-accent); background: color-mix(in srgb, var(--tile-accent) 8%, #fff); box-shadow: 0 0 0 1px var(--tile-accent); }
+.summary-tile.is-available { --tile-accent: #059669; }
+.summary-tile.is-reserved { --tile-accent: #0E7490; }
+.summary-tile.is-occupied { --tile-accent: #2563EB; }
+.summary-tile.is-overdue { --tile-accent: #D97706; }
+.summary-tile.is-expiring { --tile-accent: #7C3AED; }
+.summary-tile.is-expired { --tile-accent: #DC2626; }
+.summary-label { font-size: 13px; font-weight: 600; }
+.summary-value { font-size: 15px; font-weight: 800; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.summary-sub { font-size: 12px; color: var(--color-text-muted); }
+
+.floor-list { display: grid; gap: 20px; }
+.floor-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.floor-title { margin: 0; font-size: 16px; font-weight: 800; color: var(--color-text); white-space: nowrap; }
+.floor-count { padding: 2px 10px; border-radius: 999px; background: #F1F5F9; font-size: 12px; font-weight: 600; color: #475569; white-space: nowrap; }
+.floor-line { flex: 1; height: 1px; background: var(--color-border); }
+
+.room-card { display: flex; flex-direction: column; justify-content: space-between; height: 100%; padding: 12px; border-radius: 12px; background: #fff; border: 1px solid var(--color-border); border-left: 4px solid var(--room-accent, #94A3B8); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); transition: box-shadow 0.2s ease; }
+.room-card:hover { box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08); }
+.room-card.is-available { --room-accent: #059669; background: #F0FDF4; }
+.room-card.is-reserved { --room-accent: #0E7490; background: #ECFEFF; }
+.room-card.is-occupied { --room-accent: #2563EB; }
+.room-card.is-overdue { --room-accent: #D97706; }
+.room-card.is-expiring { --room-accent: #7C3AED; }
+.room-card.is-expired { --room-accent: #DC2626; background: #FEF2F2; }
+.room-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.room-number { font-size: 16px; font-weight: 800; line-height: 1.2; color: var(--color-text); }
+.room-status { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--room-accent) 12%, #fff); font-size: 12px; font-weight: 700; color: var(--room-accent); white-space: nowrap; }
+.room-price small { font-size: 12px; font-weight: 500; color: #64748B; }
+.room-tools { display: flex; align-items: center; gap: 4px; color: var(--room-accent); }
+.room-specs { display: grid; gap: 4px; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.75); border: 1px solid var(--color-border); }
+.room-spec { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; }
+.room-spec-label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #64748B; }
+.room-price { font-size: 14px; font-weight: 700; color: var(--color-text); }
+.room-tenant { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; color: #475569; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.room-actions > .ant-btn { flex: 1; font-weight: 600; }
+.btn-meter.ant-btn { border-color: #FDE047; background: #FEFCE8; color: #854D0E; }
+.btn-meter.ant-btn:not(:disabled):hover { border-color: #FACC15; background: #FEF9C3; color: #713F12; }
+.tenant-box { margin-top: 12px; padding: 12px; border-radius: 10px; background: #F8FAFC; border: 1px solid var(--color-border); }
+.tenant-box-label { font-size: 11px; font-weight: 800; letter-spacing: 0.4px; color: #64748B; text-transform: uppercase; }
+.tenant-box-value { margin-top: 4px; font-size: 14px; font-weight: 700; color: var(--color-text); }
+.footer-left.ant-btn { float: left; }
+.w-full { width: 100%; }
+
+/* ─── Quản lý hợp đồng (landlord/ContractManager) ─────────────────────────── */
+.cell-sub { color: #64748B; }
+.loading-block { padding: 40px 0; text-align: center; }
+.contract-bar.ant-card { margin-bottom: 20px; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 10px; }
+.contract-bar .ant-form-item { margin-bottom: 0; }
+.contract-bar .ant-form-item-label > label { font-weight: 700; color: #1E293B; }
+.scan-card.ant-card { margin-bottom: 20px; background: #F0FDF4; border: 1px dashed #86EFAC; border-radius: 10px; }
+.scan-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.scan-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #166534; }
+.scan-desc { font-size: 12px; color: #15803D; }
+
+/* Bản hợp đồng giấy (form lập & bản xem/in) */
+.paper { padding: 24px; background: #fff; border: 1px solid #CBD5E1; border-radius: 12px; box-shadow: 0 6px 16px rgba(15, 23, 42, 0.03); line-height: 1.8; font-family: serif; font-size: 14.5px; color: var(--color-text); }
+.paper-national { margin-bottom: 20px; text-align: center; }
+.paper-national-line { width: 180px; margin: 8px auto; border-bottom: 1.5px solid currentColor; }
+.paper-heading { margin-bottom: 24px; text-align: center; }
+.paper-title { margin: 0; font-family: serif; font-size: 20px; font-weight: 800; color: var(--color-text); }
+.paper-basis { color: #64748B; font-style: italic; }
+.paper-section { margin-bottom: 18px; }
+.paper-section-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.paper-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.paper-party { margin-bottom: 20px; padding: 16px; border-radius: 10px; background: #FAFAFA; border: 1px solid var(--color-border); }
+.paper-party-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.paper-party-title { font-size: 14px; font-weight: 700; }
+.paper-party-title.is-a { color: #2563EB; }
+.paper-party-title.is-b { color: #16A34A; }
+.party-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.tenant-select { width: 220px; max-width: 100%; }
+.link-a.ant-btn { padding: 0; height: auto; font-weight: 600; color: #2563EB; }
+.link-b.ant-btn { padding: 0; height: auto; font-weight: 700; color: #16A34A; }
+.paper-form .ant-form-item { margin-bottom: 8px; }
+.paper-form .ant-form-item-label > label { font-family: var(--font-sans, Inter, sans-serif); font-size: 12px; font-weight: 600; }
+.custom-prices { margin-top: 8px; padding: 12px 6px; border-radius: 8px; background: #F8FAFC; }
+.custom-prices .ant-form-item { margin-bottom: 0; }
+.custom-prices .ant-form-item-label > label { font-size: 11px; font-weight: 700; }
+.w-60 { width: 60px; }
+.w-80 { width: 80px; }
+
+.inv-table { width: 100%; margin-top: 6px; border-collapse: collapse; font-family: var(--font-sans, Inter, sans-serif); font-size: 13px; }
+.inv-table th { background: #F1F5F9; font-weight: 600; }
+.inv-table th, .inv-table td { padding: 6px; border: 1px solid #CBD5E1; text-align: left; }
+.inv-table .c { text-align: center; }
+.inv-table.is-edit td { padding: 4px; }
+.col-stt { width: 48px; }
+.col-qty { width: 100px; }
+.col-state { width: 170px; }
+.col-del { width: 56px; }
+
+.paper-signs { display: flex; justify-content: space-between; gap: 24px; margin-top: 30px; padding-top: 20px; border-top: 1px dashed #CBD5E1; }
+.paper-sign { width: 45%; text-align: center; }
+.paper-sign-hint { color: #64748B; }
+.paper-sign-slot { margin: 12px 0; }
+.paper-sign-img { max-height: 80px; object-fit: contain; }
+.paper-sign-gap { height: 60px; }
+.paper-sign-wait { margin: 20px 0; font-size: 13px; font-style: italic; color: #B45309; }
+@media (max-width: 575px) {
+  .paper { padding: 16px; }
+  .paper-signs { flex-direction: column; align-items: center; }
+  .paper-sign { width: 100%; }
+}
+
+/* ─── Widget trợ lý ảo (ChatWidget) ───────────────────────────────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.chat-launcher {
+  position: fixed; right: 24px; bottom: 24px; z-index: 999;
+  width: 56px; height: 56px; border: none; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--color-primary); color: #fff;
+  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.35);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.chat-launcher:hover { background: #0D9488; transform: translateY(-2px); }
+.chat-launcher:active { transform: translateY(0); }
+
+.chat-panel {
+  position: fixed; right: 24px; bottom: 92px; z-index: 999;
+  width: 360px; max-width: calc(100vw - 32px);
+  height: 480px; max-height: calc(100vh - 120px);
+  display: flex; flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border); border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+.chat-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 12px 12px 16px;
+  background: var(--color-primary); color: #fff; flex-shrink: 0;
+}
+.chat-panel-title { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+.chat-panel-head .icon-btn { color: #fff; }
+.chat-panel-head .icon-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--color-bg);
+}
+.chat-msg {
+  max-width: 85%; padding: 9px 12px; border-radius: 14px;
+  font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.chat-msg.user {
+  align-self: flex-end;
+  background: var(--color-primary); color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.chat-msg.assistant {
+  align-self: flex-start;
+  background: var(--color-surface); color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-bottom-left-radius: 4px;
+}
+.chat-typing {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--color-text-muted); font-style: italic;
+}
+
+.chat-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.chat-suggestion {
+  border: 1px solid #99F6E4; background: var(--color-primary-soft); color: var(--color-primary);
+  font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 6px 10px; border-radius: 999px; cursor: pointer; text-align: left;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.chat-suggestion:hover { background: #CCFBF1; border-color: #14B8A6; }
+
+.chat-input-row {
+  display: flex; gap: 8px; padding: 10px; flex-shrink: 0;
+  border-top: 1px solid var(--color-border); background: var(--color-surface);
+}
+.chat-input-row input {
+  flex: 1; min-width: 0; padding: 9px 12px;
+  border: 1px solid var(--color-border); border-radius: 10px;
+  font: inherit; font-size: 13.5px; color: var(--color-text); background: var(--color-surface);
+}
+.chat-input-row input:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; border-color: var(--color-primary); }
+.chat-send {
+  width: 40px; height: 40px; flex-shrink: 0;
+  border: none; border-radius: 10px; cursor: pointer;
+  display: grid; place-items: center;
+  background: var(--color-primary); color: #fff;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+.chat-send:hover:not(:disabled) { background: #0D9488; }
+.chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 767px) {
+  .chat-launcher { right: 16px; bottom: 84px; }
+  .chat-panel { right: 16px; bottom: 148px; height: min(480px, calc(100vh - 180px)); }
+}
+
+/* ─── Thẻ xác nhận hành động trong chat ───────────────────────────────────── */
+.chat-action-card {
+  margin-top: 8px; padding: 10px 12px;
+  border: 1px solid #99F6E4; border-radius: 10px;
+  background: var(--color-primary-soft);
+}
+.chat-action-title { font-size: 12px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; color: var(--color-primary); }
+.chat-action-rows { margin: 8px 0 0; display: grid; gap: 4px; }
+.chat-action-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.chat-action-row dt { color: var(--color-text-muted); flex-shrink: 0; }
+.chat-action-row dd { margin: 0; font-weight: 700; color: var(--color-text); text-align: right; overflow-wrap: anywhere; }
+.chat-action-buttons { display: flex; gap: 8px; margin-top: 10px; }
+.chat-action-confirm {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 6px 12px;
+  border: none; border-radius: 8px; cursor: pointer;
+  background: var(--color-primary); color: #fff; font: inherit; font-size: 13px; font-weight: 700;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+.chat-action-confirm:hover:not(:disabled) { background: #0D9488; }
+.chat-action-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
+.chat-action-cancel {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 6px 12px;
+  border: 1px solid var(--color-border); border-radius: 8px; cursor: pointer;
+  background: var(--color-surface); color: var(--color-text-muted); font: inherit; font-size: 13px; font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+.chat-action-cancel:hover:not(:disabled) { background: #F1F5F9; color: var(--color-text); }
+.chat-action-cancel:disabled { opacity: 0.6; cursor: not-allowed; }
+.chat-action-result {
+  margin-top: 8px; display: flex; align-items: flex-start; gap: 6px;
+  padding: 8px 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
+}
+.chat-action-result.ok { background: #F0FDF4; border: 1px solid #BBF7D0; color: #15803D; }
+.chat-action-result.error { background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626; }
+.chat-action-result.muted { background: #F8FAFC; border: 1px solid var(--color-border); color: var(--color-text-muted); }
+
+/* ─── Responsive dùng chung (phone / tablet) ─────────────────────────────── */
+/* Bảng rộng cuộn ngang TRONG khung, không kéo giãn trang */
+.ant-table-wrapper { max-width: 100%; }
+.ant-table-wrapper .ant-table-content,
+.ant-table-wrapper .ant-table-body { overflow-x: auto; }
+/* Con của grid/flex không được nở theo nội dung nowrap */
+.list-stack > *, .ant-col, .ant-card, .ant-card-body { min-width: 0; }
+.ant-descriptions-view { overflow-x: auto; }
+/* Tiện ích cho page agent: bọc nội dung rộng (bảng HTML, hàng nút dài) */
+.scroll-x { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* Hàng filter/hành động tự xuống dòng; trên phone mỗi control full width */
+.toolbar-wrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+@media (max-width: 767px) {
+  /* Modal vừa màn hình, nội dung dài cuộn trong body */
+  .ant-modal { max-width: calc(100vw - 32px) !important; margin: 0 auto; }
+  .ant-modal-wrap .ant-modal { top: 16px; padding-bottom: 16px; }
+  .ant-modal .ant-modal-body { max-height: calc(100vh - 200px); overflow-y: auto; }
+  /* Drawer full màn hình trên phone */
+  .ant-drawer-content-wrapper { max-width: 100vw; }
+  /* Vùng chạm >= 44px cho hành động chính */
+  .page-header-actions .ant-btn, .toolbar-wrap .ant-btn, .ant-modal-footer .ant-btn { min-height: 44px; }
+  .toolbar-wrap > * { flex: 1 1 100%; }
+  .toolbar-wrap > .ant-btn, .toolbar-wrap > .ant-select, .toolbar-wrap > .ant-picker, .toolbar-wrap > .ant-input-affix-wrapper { width: 100%; }
+  .icon-btn { width: 44px; height: 44px; }
+  .bottom-nav-item { min-height: 44px; font-size: 12px; }
+  /* Form nhiều cột trong modal/drawer: input full width */
+  .ant-form-item .ant-select, .ant-form-item .ant-picker, .ant-form-item .ant-input-number { width: 100% !important; }
 }

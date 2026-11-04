@@ -1,9 +1,42 @@
-import { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Tag, Table, Button, Space, Spin, message, Select, Alert } from 'antd';
-import { ArrowRight, Wrench, ShieldAlert, CheckCircle2, Home, Landmark, AlertCircle, FileText } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useState, useEffect, useCallback } from 'react';
+import PropTypes from 'prop-types';
+import { Row, Col, Card, Tag, Table, Button, Spin, message, Select, Empty, Alert, Progress } from 'antd';
+import { ArrowRight, Wrench, CheckCircle2, Home, Wallet, AlertCircle, Gauge, Lightbulb, Zap } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axios';
+import PageHeader from '../../components/admin/PageHeader';
+
+const STATUS_TAGS = {
+  pending: { color: 'warning', text: 'Chờ duyệt' },
+  in_progress: { color: 'processing', text: 'Đang sửa' },
+  resolved: { color: 'success', text: 'Đã xong' },
+};
+
+// Màu cột biểu đồ: Kỳ vọng / Đã thu / Chưa thu
+const BAR_COLORS = ['#94A3B8', '#0F766E', '#DC2626'];
+
+const StatCard = ({ label, value, icon, tint, footer, loading }) => (
+  <Card className="stat-card">
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+      <div style={{ minWidth: 0 }}>
+        <div className="stat-label">{label}</div>
+        <div className="stat-value" style={{ fontSize: 22 }}>{loading ? <Spin size="small" /> : value}</div>
+      </div>
+      <div className="stat-icon" style={{ background: tint + '14', color: tint }} aria-hidden="true">{icon}</div>
+    </div>
+    {footer && <div style={{ marginTop: 10 }}>{footer}</div>}
+  </Card>
+);
+
+StatCard.propTypes = {
+  label: PropTypes.node.isRequired,
+  value: PropTypes.node,
+  icon: PropTypes.node,
+  tint: PropTypes.string.isRequired,
+  footer: PropTypes.node,
+  loading: PropTypes.bool,
+};
 
 const LandlordDashboard = () => {
   const navigate = useNavigate();
@@ -17,7 +50,7 @@ const LandlordDashboard = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12 hoặc 'all'
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     setStatsLoading(true);
     try {
       const data = await axiosInstance.get(`/invoices/status?month=${selectedMonth}&year=${selectedYear}`);
@@ -28,9 +61,9 @@ const LandlordDashboard = () => {
     } finally {
       setStatsLoading(false);
     }
-  };
+  }, [selectedMonth, selectedYear]);
 
-  const fetchGeneralData = async () => {
+  const fetchGeneralData = useCallback(async () => {
     setLoading(true);
     try {
       const [roomsData, supportData] = await Promise.all([
@@ -45,33 +78,29 @@ const LandlordDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchGeneralData();
   }, []);
 
   useEffect(() => {
-    fetchStats();
-  }, [selectedMonth, selectedYear]);
+    fetchGeneralData();
+  }, [fetchGeneralData]);
 
-  // Danh sách năm sinh động: năm hiện tại và 4 năm trước đó.
-  // Hardcode [2026, 2025] khiến sang năm sau không chọn được năm hiện tại,
-  // nên hóa đơn mới xuất sẽ không xem được trên màn thống kê.
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Danh sách năm: năm hiện tại và 4 năm trước đó
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => {
     const y = currentYear - i;
     return { value: y, label: `Năm ${y}` };
   });
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
-  };
+  const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
 
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-        <Spin size="large" tip="Đang tải dữ liệu tổng quan..." />
+        <Spin size="large" />
       </div>
     );
   }
@@ -79,9 +108,10 @@ const LandlordDashboard = () => {
   // Phân tích dữ liệu phòng
   const totalRooms = rooms.length;
   const vacantRooms = rooms.filter(r => r.status === 'empty').length;
-  const occupancyRate = totalRooms > 0 ? (((totalRooms - vacantRooms) / totalRooms) * 100).toFixed(0) : 0;
+  const occupancyRate = totalRooms > 0 ? Math.round(((totalRooms - vacantRooms) / totalRooms) * 100) : 0;
+  const periodLabel = selectedMonth === 'all' ? `năm ${selectedYear}` : `tháng ${selectedMonth}/${selectedYear}`;
 
-  const activityData = supportRequests.slice(0, 4).map(req => ({
+  const activityData = supportRequests.slice(0, 5).map(req => ({
     key: req.id.toString(),
     time: new Date(req.createdAt).toLocaleDateString('vi-VN') + ' ' + new Date(req.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
     roomNumber: req.room?.roomNumber || 'N/A',
@@ -97,126 +127,77 @@ const LandlordDashboard = () => {
 
   return (
     <div>
-      {/* TITLE BANNER & TIME FILTERS */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#1a3353', margin: 0 }}>
-            Tổng quan Vận hành
-          </h1>
-          <p style={{ color: '#8c8c8c', margin: '4px 0 0 0' }}>
-            Chào mừng trở lại! Theo dõi thông số vận hành và thống kê doanh thu khu trọ của bạn.
-          </p>
-        </div>
-        <Space wrap>
-          {/* Lọc tháng (Có tùy chọn Cả năm) */}
-          <Select
-            value={selectedMonth}
-            style={{ width: 120 }}
-            onChange={(val) => setSelectedMonth(val)}
-            options={[
-              { value: 'all', label: 'Cả năm' },
-              ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
-            ]}
-          />
-          {/* Lọc năm */}
-          <Select
-            value={selectedYear}
-            style={{ width: 120 }}
-            onChange={(val) => setSelectedYear(val)}
-            options={yearOptions}
-          />
-          <Button type="primary" style={{ background: '#1a3353', border: 'none' }} onClick={() => navigate('/landlord/utilities')}>
-            Chốt số điện nước
-          </Button>
-        </Space>
-      </div>
-
-      {/* STATS CARDS */}
-      <Row gutter={[20, 20]} style={{ marginBottom: '24px' }}>
-        
-        {/* DOANH THU ĐÃ THU */}
-        <Col xs={12} lg={6}>
-          <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '16px' }}>
-            {statsLoading ? (
-              <Spin size="small" />
-            ) : (
-              <Statistic
-                title={<span style={{ fontSize: '11px', color: '#8c8c8c', fontWeight: 'bold', textTransform: 'uppercase' }}>THỰC THU ({selectedMonth === 'all' ? 'CẢ NĂM' : `THÁNG ${selectedMonth}`})</span>}
-                value={stats?.totalCollected}
-                formatter={(val) => formatVND(val)}
-                valueStyle={{ color: '#10b981', fontWeight: '800', fontSize: '18px' }}
-              />
-            )}
-            <Tag color="success" style={{ marginTop: '8px', border: 'none', fontWeight: 'bold' }}>Đã thanh toán</Tag>
-          </Card>
-        </Col>
-
-        {/* TỶ LỆ LẤP ĐẦY */}
-        <Col xs={12} lg={6}>
-          <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '16px' }}>
-            <div style={{ fontSize: '11px', color: '#8c8c8c', fontWeight: 'bold', textTransform: 'uppercase' }}>
-              TỶ LỆ LẤP ĐẦY
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: '800', margin: '6px 0', color: '#1a3353' }}>
-              {occupancyRate}%
-            </div>
-            <div style={{ height: '4px', background: '#f0f0f0', borderRadius: '2px' }}>
-              <div style={{ width: `${occupancyRate}%`, height: '100%', background: '#52c41a', borderRadius: '2px' }} />
-            </div>
-          </Card>
-        </Col>
-
-        {/* PHÒNG TRỐNG */}
-        <Col xs={12} lg={6}>
-          <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '16px' }}>
-            <Statistic
-              title={<span style={{ fontSize: '11px', color: '#8c8c8c', fontWeight: 'bold' }}>PHÒNG CÒN TRỐNG</span>}
-              value={vacantRooms}
-              valueStyle={{ fontWeight: '800', color: '#0ea5e9', fontSize: '20px' }}
+      <PageHeader
+        title="Tổng quan vận hành"
+        description="Theo dõi thông số vận hành và doanh thu khu trọ của bạn."
+        extra={
+          <div className="toolbar-wrap">
+            <Select
+              aria-label="Chọn tháng"
+              value={selectedMonth}
+              style={{ minWidth: 120 }}
+              onChange={setSelectedMonth}
+              options={[
+                { value: 'all', label: 'Cả năm' },
+                ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
+              ]}
             />
-            <Tag color="cyan" style={{ marginTop: '8px', border: 'none', fontWeight: 'bold' }}>Sẵn sàng thuê</Tag>
-          </Card>
-        </Col>
+            <Select aria-label="Chọn năm" value={selectedYear} style={{ minWidth: 120 }} onChange={setSelectedYear} options={yearOptions} />
+            <Button type="primary" icon={<Zap size={16} />} onClick={() => navigate('/landlord/utilities')}>
+              Chốt điện nước
+            </Button>
+          </div>
+        }
+      />
 
-        {/* PHÒNG CHƯA ĐÓNG TIỀN / SỐ PHÒNG NỢ */}
-        <Col xs={12} lg={6}>
-          <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '16px' }}>
-            {statsLoading ? (
-              <Spin size="small" />
-            ) : (
-              <Statistic
-                title={<span style={{ fontSize: '11px', color: '#8c8c8c', fontWeight: 'bold', textTransform: 'uppercase' }}>PHÒNG NỢ TIỀN</span>}
-                value={stats?.unpaidRooms}
-                valueStyle={{ color: '#ef4444', fontWeight: '800', fontSize: '20px' }}
-              />
+      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard
+            label={`Thực thu ${periodLabel}`}
+            value={formatVND(stats?.totalCollected)}
+            icon={<Wallet size={20} />}
+            tint="#0F766E"
+            loading={statsLoading}
+            footer={!statsLoading && stats?.depositOffset > 0 && (
+              <div style={{ fontSize: 13, color: '#475569' }}>
+                Cấn trừ cọc: <b>{formatVND(stats.depositOffset)}</b> · Tiền mới thu: <b>{formatVND(stats.cashCollected)}</b>
+              </div>
             )}
-            <Tag color="red" style={{ marginTop: '8px', border: 'none', fontWeight: 'bold' }}>Cần nhắc nhở</Tag>
-          </Card>
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard
+            label="Tỷ lệ lấp đầy"
+            value={`${occupancyRate}%`}
+            icon={<Gauge size={20} />}
+            tint="#0369A1"
+            footer={<Progress percent={occupancyRate} showInfo={false} strokeColor="#0369A1" size={['100%', 6]} />}
+          />
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard label="Phòng còn trống" value={`${vacantRooms} / ${totalRooms}`} icon={<Home size={20} />} tint="#15803D" />
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <StatCard label="Phòng nợ tiền" value={stats?.unpaidRooms ?? 0} icon={<AlertCircle size={20} />} tint="#DC2626" loading={statsLoading} />
         </Col>
       </Row>
 
-      {/* CHARTS & RECOMMENDATIONS SECTIONS */}
-      <Row gutter={[24, 24]} style={{ marginBottom: '24px' }}>
-        {/* BIỂU ĐỒ DOANH THU */}
-        <Col xs={24} md={12}>
-          <Card 
-            title={<span style={{ fontWeight: '800', fontSize: '14px', color: '#1a3353' }}>Biểu đồ Cơ cấu Doanh thu ({selectedMonth === 'all' ? `Năm ${selectedYear}` : `Tháng ${selectedMonth}/${selectedYear}`})</span>} 
-            bordered={false} 
-            style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}
-          >
+      <Row gutter={[20, 20]} style={{ marginBottom: 20 }}>
+        <Col xs={24} lg={14}>
+          <Card title={<span className="card-title">Cơ cấu doanh thu {periodLabel}</span>} style={{ height: '100%' }}>
             {statsLoading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '260px' }}>
-                <Spin size="default" tip="Đang tải biểu đồ doanh thu..." />
-              </div>
+              <div style={{ display: 'grid', placeItems: 'center', height: 260 }}><Spin /></div>
             ) : (
-              <div style={{ height: 260 }}>
+              <div style={{ height: 260 }} role="img" aria-label={`Biểu đồ doanh thu: kỳ vọng ${formatVND(stats?.totalExpected)}, đã thu ${formatVND(stats?.totalCollected)}, chưa thu ${formatVND(stats?.unpaidAmount)}`}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis tickFormatter={(val) => val ? (val / 1000000) + 'M' : '0M'} />
-                    <Tooltip formatter={(value) => [formatVND(value), 'Số tiền']} />
-                    <Bar dataKey="amount" fill="#1a3353" radius={[8, 8, 0, 0]} barSize={40} />
+                  <BarChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEF2F6" />
+                    <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 13 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#64748B', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(val) => val ? (val / 1000000) + 'M' : '0'} />
+                    <Tooltip cursor={{ fill: '#F8FAFC' }} formatter={(value) => [formatVND(value), 'Số tiền']} />
+                    <Bar dataKey="amount" radius={[6, 6, 0, 0]} barSize={44}>
+                      {chartData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i]} />)}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -224,77 +205,71 @@ const LandlordDashboard = () => {
           </Card>
         </Col>
 
-        {/* KHUYẾN NGHỊ & NỢ ĐỌNG */}
-        <Col xs={24} md={12}>
-          <Card 
-            title={<span style={{ fontWeight: '800', fontSize: '14px', color: '#1a3353' }}>Khuyến nghị tài chính</span>} 
-            bordered={false} 
-            style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', height: '100%' }}
-          >
+        <Col xs={24} lg={10}>
+          <Card title={<span className="card-title">Khuyến nghị tài chính</span>} style={{ height: '100%' }}>
             {statsLoading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '260px' }}>
-                <Spin size="default" tip="Đang tính toán số liệu..." />
+              <div style={{ display: 'grid', placeItems: 'center', height: 260 }}><Spin /></div>
+            ) : stats?.invoiceCount === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <Empty description="Chưa có hóa đơn nào cho kỳ này" />
+                <Button type="primary" style={{ marginTop: 12 }} onClick={() => navigate('/landlord/utilities')}>Xuất hóa đơn</Button>
               </div>
             ) : stats?.unpaidAmount > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <Alert
-                  message="Cảnh báo nợ đọng"
-                  description={`Hiện tại đang có ${stats.unpaidRooms} lượt hóa đơn chưa thanh toán với tổng số tiền nợ đọng là ${formatVND(stats.unpaidAmount)}.`}
                   type="error"
                   showIcon
-                  style={{ borderRadius: '8px' }}
+                  message="Cảnh báo nợ đọng"
+                  description={`Có ${stats.unpaidRooms} phòng còn hóa đơn chưa thanh toán, tổng nợ ${formatVND(stats.unpaidAmount)}.`}
                 />
-                <div style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6' }}>
-                  💡 <strong>Mẹo thu hồi nợ:</strong> Hãy truy cập vào Bot Telegram của hệ thống để nhắc nhở người thuê trọ. Khi người thuê thực hiện thanh toán chuyển khoản, bạn chỉ cần gạch nợ trên hóa đơn để tự động đồng bộ doanh thu.
+                <div style={{ display: 'flex', gap: 10, fontSize: 14, color: '#475569', lineHeight: 1.6 }}>
+                  <Lightbulb size={18} color="#B45309" style={{ flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
+                  <span>
+                    <b style={{ color: '#0F172A' }}>Mẹo thu hồi nợ:</b> Dùng Bot Telegram của hệ thống để nhắc người thuê. Khi họ chuyển khoản, gạch nợ trên hóa đơn để doanh thu tự đồng bộ.
+                  </span>
                 </div>
+                <Button type="primary" onClick={() => navigate('/landlord/invoices?status=unpaid')}>Gạch nợ hóa đơn</Button>
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '30px 0' }}>
-                <CheckCircle2 size={48} color="#52c41a" style={{ margin: '0 auto 12px auto' }} />
-                <h3 style={{ fontWeight: 'bold', color: '#52c41a' }}>Tài chính hoàn hảo!</h3>
-                <p style={{ color: '#8c8c8c', fontSize: '13px', margin: 0 }}>
-                  Không ghi nhận nợ đọng nào trong chu kỳ này. Tất cả hóa đơn đã hoàn tất thanh toán.
-                </p>
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <CheckCircle2 size={44} color="#15803D" style={{ marginBottom: 12 }} aria-hidden="true" />
+                <h3 style={{ fontWeight: 700, color: '#15803D', margin: '0 0 4px' }}>Không có nợ đọng</h3>
+                <p style={{ color: '#475569', fontSize: 14, margin: 0 }}>Tất cả hóa đơn trong kỳ này đã được thanh toán.</p>
               </div>
             )}
           </Card>
         </Col>
       </Row>
 
-      {/* RECENT SUPPORT TICKETS TABLE */}
       <Card
-        title={<span style={{ fontWeight: '800', color: '#1a3353', fontSize: '14px' }}><Wrench size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Các báo cáo sự cố & yêu cầu sửa chữa gần đây</span>}
-        style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}
-        extra={<Button type="link" onClick={() => navigate('/landlord/support')}>Quản lý Sự Cố</Button>}
+        title={<span className="card-title"><Wrench size={18} color="#0F766E" aria-hidden="true" /> Sự cố & yêu cầu sửa chữa gần đây</span>}
+        extra={<Button type="link" onClick={() => navigate('/landlord/support')}>Xem tất cả</Button>}
+        styles={{ body: { padding: 0 } }}
       >
         <Table
           dataSource={activityData}
           pagination={false}
-          scroll={{ x: true }}
+          scroll={{ x: 760 }}
+          locale={{ emptyText: 'Chưa có báo cáo sự cố nào' }}
           columns={[
-            { title: "MÃ SỰ CỐ", dataIndex: "key", render: (val) => <b>#{val}</b> },
-            { title: "THỜI GIAN", dataIndex: "time" },
-            { 
-              title: "SỐ PHÒNG", 
-              dataIndex: "roomNumber", 
-              render: (room) => <Tag color="geekblue" style={{ fontWeight: 'bold' }}>Phòng {room}</Tag> 
-            },
-            { title: "MÔ TẢ SỰ CỐ", dataIndex: "desc", width: '40%' },
+            { title: 'Mã', dataIndex: 'key', width: 80, render: (val) => <b>#{val}</b> },
+            { title: 'Thời gian', dataIndex: 'time', width: 160, render: (t) => <span style={{ color: '#475569' }}>{t}</span> },
+            { title: 'Phòng', dataIndex: 'roomNumber', width: 100, render: (room) => <Tag color="cyan">P.{room}</Tag> },
+            { title: 'Mô tả', dataIndex: 'desc', ellipsis: true },
             {
-              title: "TRẠNG THÁI XỬ LÝ",
-              dataIndex: "status",
+              title: 'Trạng thái',
+              dataIndex: 'status',
+              width: 120,
               render: (status) => {
-                let color = 'warning';
-                let text = 'Chờ duyệt';
-                if (status === 'in_progress') { color = 'processing'; text = 'Đang sửa'; }
-                else if (status === 'resolved') { color = 'success'; text = 'Đã xong'; }
-                return <Tag color={color} style={{ fontWeight: 'bold' }}>{text}</Tag>;
+                const cfg = STATUS_TAGS[status] || STATUS_TAGS.pending;
+                return <Tag color={cfg.color}>{cfg.text}</Tag>;
               }
             },
             {
-              title: "HÀNH ĐỘNG",
+              title: '',
+              width: 56,
               render: () => (
-                <Button type="text" icon={<ArrowRight size={16} />} onClick={() => navigate('/landlord/support')} />
+                <Button type="text" aria-label="Xem chi tiết sự cố" icon={<ArrowRight size={16} />} onClick={() => navigate('/landlord/support')} />
               ),
             },
           ]}

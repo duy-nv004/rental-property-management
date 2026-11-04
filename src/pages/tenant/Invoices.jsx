@@ -1,32 +1,125 @@
-import { useState, useEffect } from 'react';
-import { Card, Button, Badge, Modal, Empty, Spin, Tag, Row, Col, Space, Divider, message } from 'antd';
-import { CreditCard, Eye, Calendar, DollarSign, Download, ExternalLink, ArrowLeft, ArrowUpRight } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, Button, Modal, Empty, Spin, Tag, Divider, Alert, message, Select } from 'antd';
+import dayjs from 'dayjs';
+import { CreditCard, Eye, Download } from 'lucide-react';
+import '../../styles/tenant.css';
 import axiosInstance from '../../utils/axios';
+
+const METHOD_LABEL = {
+  cash: 'Tiền mặt',
+  bank_transfer: 'Chuyển khoản',
+  sepay: 'VietQR / SePay',
+  deposit: 'Cấn trừ tiền cọc',
+};
 
 const TenantInvoices = () => {
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
+  // Lọc theo phòng khi khách thuê nhiều phòng; 'all' = mọi phòng
+  const [roomFilter, setRoomFilter] = useState('all');
+
+  const fetchInvoices = useCallback(async () => {
+    try {
+      const data = await axiosInstance.get('/tenant/invoices');
+      setInvoices(data);
+    } catch (err) {
+      console.error('Error fetching invoices:', err);
+      message.error('Không thể tải danh sách hóa đơn.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchInvoices = async () => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
+  // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
+  useEffect(() => {
+    const onChanged = () => { fetchInvoices(); };
+    window.addEventListener('app:data-changed', onChanged);
+    return () => window.removeEventListener('app:data-changed', onChanged);
+  }, [fetchInvoices]);
+
+  // Đang mở QR: hỏi lại server mỗi 5 giây; khi hóa đơn đã được xác nhận thì đóng modal và báo thành công
+  const pollingId = qrModalVisible ? selectedInvoice?.id : null;
+  useEffect(() => {
+    if (!pollingId) return undefined;
+    const timer = setInterval(async () => {
       try {
         const data = await axiosInstance.get('/tenant/invoices');
         setInvoices(data);
+        if (data.find((inv) => inv.id === pollingId)?.isPaid) {
+          setQrModalVisible(false);
+          setSelectedInvoice(null);
+          message.success('Hóa đơn đã được thanh toán thành công!');
+        }
       } catch (err) {
-        console.error('Error fetching invoices:', err);
-        message.error('Không thể tải danh sách hóa đơn.');
-      } finally {
-        setLoading(false);
+        console.error('Error polling invoices:', err);
       }
-    };
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [pollingId]);
+
+  const closeQR = () => {
+    setQrModalVisible(false);
     fetchInvoices();
-  }, []);
+  };
 
   const formatVND = (value) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
   };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  // T3.5: Hiển thị trạng thái chi tiết từ dueDate & status
+  const renderInvoiceStatusTag = (inv) => {
+    const paid = Number(inv.paidAmount || 0);
+    const total = Number(inv.totalAmount || 0);
+    if (inv.isPaid) {
+      const paidDate = inv.paidAt ? formatDate(inv.paidAt) : null;
+      const method = METHOD_LABEL[inv.paymentMethod] || null;
+      const suffix = [paidDate, method].filter(Boolean).join(' • ');
+      return (
+        <Tag color="success" className="tag-flat">
+          Đã đóng{suffix ? ` (${suffix})` : ''}
+        </Tag>
+      );
+    }
+    if (inv.status === 'partial' || (paid > 0 && paid < total)) {
+      return (
+        <Tag color="processing" className="tag-flat">
+          Đã trả một phần ({formatVND(paid)}/{formatVND(total)})
+        </Tag>
+      );
+    }
+    if (inv.dueDate) {
+      const today = dayjs().startOf('day');
+      const due = dayjs(inv.dueDate).startOf('day');
+      const diffDays = today.diff(due, 'day');
+      if (diffDays > 0) {
+        return <Tag color="error" className="tag-flat">Quá hạn {diffDays} ngày</Tag>;
+      }
+      if (due.diff(today, 'day') <= 3) {
+        return <Tag color="warning" className="tag-flat">Sắp đến hạn</Tag>;
+      }
+    }
+    return <Tag color="error" className="tag-flat">Chưa thanh toán</Tag>;
+  };
+
+  // Dòng phụ "cũ → mới = tiêu thụ × đơn giá"; hóa đơn cũ không lưu chỉ số thì không hiện
+  const usageLine = (oldVal, newVal, price, unit) => (
+    newVal != null && oldVal != null ? (
+      <div className="invoice-meta">
+        {oldVal} → {newVal} = {newVal - oldVal} {unit} × {formatVND(price)}
+      </div>
+    ) : null
+  );
 
   const handleOpenDetails = (inv) => {
     setSelectedInvoice(inv);
@@ -39,151 +132,209 @@ const TenantInvoices = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <div className="loading-center">
         <Spin size="large" tip="Đang tải danh sách hóa đơn..." />
       </div>
     );
   }
 
+  // Danh sách phòng duy nhất từ hóa đơn (backend kèm roomDetails)
+  const rooms = [...new Map(
+    invoices.filter((inv) => inv.roomDetails).map((inv) => [inv.roomDetails.id, inv.roomDetails])
+  ).values()];
+  const hasMultipleRooms = rooms.length > 1;
+  const visibleInvoices = roomFilter === 'all'
+    ? invoices
+    : invoices.filter((inv) => inv.roomDetails?.id === roomFilter);
+  const unpaidCount = visibleInvoices.filter((inv) => !inv.isPaid).length;
+
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-      
-      {/* HEADER */}
-      <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a', margin: '0 0 4px 0' }}>Hóa đơn của tôi</h2>
-        <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>Xem lịch sử hóa đơn hàng tháng và quét mã VietQR để thanh toán nhanh.</p>
+    <div className="page-shell tenant-page">
+
+      {/* TIÊU ĐỀ TRANG */}
+      <div className="hero">
+        <h1 className="hero-title">Hóa đơn của tôi</h1>
+        <p className="hero-desc">Xem lịch sử hóa đơn hàng tháng và quét mã VietQR để thanh toán nhanh.</p>
+        {hasMultipleRooms && (
+          <Select
+            aria-label="Lọc theo phòng"
+            style={{ minWidth: 200, maxWidth: '100%', marginTop: 12 }}
+            value={roomFilter}
+            onChange={setRoomFilter}
+            options={[
+              { value: 'all', label: 'Tất cả phòng' },
+              ...rooms.map((r) => ({ value: r.id, label: `Phòng ${r.roomNumber}` }))
+            ]}
+          />
+        )}
+        {visibleInvoices.length > 0 && (
+          <div className="hero-chips">
+            <span className="hero-chip">
+              <CreditCard size={14} aria-hidden="true" />
+              Tổng <strong>{visibleInvoices.length}</strong> hóa đơn
+            </span>
+            <span className="hero-chip">
+              {unpaidCount > 0 ? (
+                <>Còn <strong>{unpaidCount}</strong> hóa đơn chưa thanh toán</>
+              ) : (
+                <>Đã thanh toán <strong>toàn bộ</strong></>
+              )}
+            </span>
+          </div>
+        )}
       </div>
 
-      {invoices.length === 0 ? (
-        <Card bordered={false} style={{ borderRadius: '12px', textAlign: 'center', padding: '30px' }}>
-          <Empty description="Bạn chưa có hóa đơn nào." />
+      {visibleInvoices.length === 0 ? (
+        <Card className="empty-card" variant="borderless">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Bạn chưa có hóa đơn nào." />
         </Card>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {invoices.map((inv) => (
-            <Card 
-              key={inv.id} 
-              bordered={false} 
-              style={{ 
-                borderRadius: '12px', 
-                boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
-                borderLeft: inv.isPaid ? '4px solid #10b981' : '4px solid #ef4444'
-              }}
-              bodyStyle={{ padding: '16px' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: '800', color: '#0f172a' }}>
-                      Tháng {inv.month}/{inv.year}
-                    </span>
-                    {inv.isPaid ? (
-                      <Tag color="success" style={{ margin: 0, borderRadius: '4px', fontWeight: 'bold' }}>Đã đóng</Tag>
-                    ) : (
-                      <Tag color="error" style={{ margin: 0, borderRadius: '4px', fontWeight: 'bold' }}>Chưa thanh toán</Tag>
-                    )}
+        <div className="list-stack">
+          {visibleInvoices.map((inv) => (
+            <div key={inv.id} className={`invoice-item ${inv.isPaid ? 'is-paid' : 'is-unpaid'}`}>
+              <div className="list-row-head">
+                <div className="list-row-main">
+                  <div className="list-row-title">
+                    Hóa đơn tháng {inv.month}/{inv.year}
+                    {hasMultipleRooms && inv.roomDetails && ` · Phòng ${inv.roomDetails.roomNumber}`}
                   </div>
-                  <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: '6px 0' }}>
-                    {formatVND(inv.totalAmount)}
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                  <div className="invoice-meta">
                     Mã HĐ: #{inv.id} • Ngày tạo: {new Date(inv.createdAt).toLocaleDateString('vi-VN')}
+                    {inv.dueDate && ` • Hạn: ${formatDate(inv.dueDate)}`}
                   </div>
                 </div>
-
-                <div style={{ display: 'flex', gap: '8px', width: '100%', sm: 'auto', marginTop: '12px', justifyContent: 'flex-end' }}>
-                  <Button 
-                    icon={<Eye size={14} />} 
-                    style={{ borderRadius: '8px', flex: 1, sm: 'none' }}
-                    onClick={() => handleOpenDetails(inv)}
-                  >
-                    Chi tiết
-                  </Button>
-                  {!inv.isPaid && (
-                    <Button 
-                      type="primary" 
-                      icon={<CreditCard size={14} />} 
-                      style={{ background: '#0f172a', border: 'none', borderRadius: '8px', flex: 1, sm: 'none' }}
-                      onClick={() => handleOpenQR(inv)}
-                    >
-                      Thanh toán
-                    </Button>
-                  )}
-                </div>
+                {renderInvoiceStatusTag(inv)}
               </div>
-            </Card>
+
+              <div className="amount amount-md">{formatVND(inv.totalAmount)}</div>
+
+              <div className="list-actions">
+                <Button icon={<Eye size={14} />} onClick={() => handleOpenDetails(inv)}>
+                  Chi tiết
+                </Button>
+                {!inv.isPaid && (
+                  <Button
+                    type="primary"
+                    className="btn-dark"
+                    icon={<CreditCard size={14} />}
+                    onClick={() => handleOpenQR(inv)}
+                  >
+                    Thanh toán
+                  </Button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
       {/* MODAL 1: CHI TIẾT HÓA ĐƠN */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px' }}>Chi tiết Hóa đơn</span>}
+        title="Chi tiết Hóa đơn"
         open={selectedInvoice !== null && !qrModalVisible}
         onCancel={() => setSelectedInvoice(null)}
         footer={[
-          <Button key="close" onClick={() => setSelectedInvoice(null)} style={{ borderRadius: '8px' }}>
+          <Button key="close" onClick={() => setSelectedInvoice(null)}>
             Đóng
           </Button>,
           selectedInvoice && !selectedInvoice.isPaid && (
-            <Button 
-              key="pay" 
-              type="primary" 
-              style={{ background: '#0f172a', border: 'none', borderRadius: '8px' }}
+            <Button
+              key="pay"
+              type="primary"
+              className="btn-dark"
               onClick={() => setQrModalVisible(true)}
             >
               Thanh toán ngay
             </Button>
           )
         ]}
-        width={450}
+        width={460}
         centered
       >
         {selectedInvoice && (
-          <div style={{ padding: '10px 0' }}>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <span style={{ fontSize: '13px', color: '#64748b' }}>Tổng hóa đơn Tháng {selectedInvoice.month}/{selectedInvoice.year}</span>
-              <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a', margin: '4px 0 0 0' }}>
-                {formatVND(selectedInvoice.totalAmount)}
-              </h2>
-              <div style={{ marginTop: '8px' }}>
-                {selectedInvoice.isPaid ? (
-                  <Tag color="success">Đã hoàn thành</Tag>
-                ) : (
-                  <Tag color="error">Chờ thanh toán</Tag>
-                )}
+          <div>
+            <div className="modal-summary">
+              <div className="list-row-sub">
+                Tổng hóa đơn Tháng {selectedInvoice.month}/{selectedInvoice.year}
+              </div>
+              <div className="amount amount-lg">{formatVND(selectedInvoice.totalAmount)}</div>
+              <div style={{ marginTop: 8 }}>
+                {renderInvoiceStatusTag(selectedInvoice)}
               </div>
             </div>
 
             <Divider style={{ margin: '12px 0' }} />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b' }}>Tiền phòng</span>
-                <span style={{ fontWeight: '700', color: '#0f172a' }}>{formatVND(selectedInvoice.roomPrice)}</span>
+            <div className="kv-list">
+              <div className="kv-row">
+                <span className="kv-label">
+                  {selectedInvoice.prorated && selectedInvoice.daysCharged
+                    ? `Tiền phòng (${selectedInvoice.daysCharged}/${new Date(selectedInvoice.year, selectedInvoice.month, 0).getDate()} ngày)`
+                    : 'Tiền phòng'}
+                </span>
+                <span className="kv-value amount">{formatVND(selectedInvoice.roomPrice)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b' }}>Tiền điện (Chỉ số chênh lệch)</span>
-                <span style={{ fontWeight: '700', color: '#0f172a' }}>{formatVND(selectedInvoice.electricityTotal)}</span>
+              <div className="kv-row">
+                <span className="kv-label">
+                  Tiền điện (Chỉ số chênh lệch)
+                  {usageLine(selectedInvoice.electricityOld, selectedInvoice.electricityNew, selectedInvoice.electricityPrice, 'kWh')}
+                </span>
+                <span className="kv-value amount">{formatVND(selectedInvoice.electricityTotal)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b' }}>Tiền nước (Chỉ số chênh lệch)</span>
-                <span style={{ fontWeight: '700', color: '#0f172a' }}>{formatVND(selectedInvoice.waterTotal)}</span>
+              <div className="kv-row">
+                <span className="kv-label">
+                  Tiền nước (Chỉ số chênh lệch)
+                  {usageLine(selectedInvoice.waterOld, selectedInvoice.waterNew, selectedInvoice.waterPrice, 'm³')}
+                </span>
+                <span className="kv-value amount">{formatVND(selectedInvoice.waterTotal)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: '#64748b' }}>Tiền dịch vụ (Vệ sinh, Internet)</span>
-                <span style={{ fontWeight: '700', color: '#0f172a' }}>{formatVND(selectedInvoice.serviceTotal)}</span>
+              <div className="kv-row">
+                <span className="kv-label">Tiền dịch vụ (Vệ sinh, Internet)</span>
+                <span className="kv-value amount">{formatVND(selectedInvoice.serviceTotal)}</span>
               </div>
             </div>
 
+            {/* T3.5: Khối Thông tin thanh toán khi đã đóng hoặc trả một phần */}
+            {(selectedInvoice.isPaid || selectedInvoice.status === 'partial' || Number(selectedInvoice.paidAmount) > 0) && (
+              <>
+                <Divider style={{ margin: '12px 0' }} />
+                <div className="kv-list">
+                  <div className="kv-row">
+                    <span className="kv-label"><strong>Thông tin thanh toán</strong></span>
+                    <span className="kv-value">{METHOD_LABEL[selectedInvoice.paymentMethod] || 'Tiền mặt'}</span>
+                  </div>
+                  <div className="kv-row">
+                    <span className="kv-label">Số tiền đã đóng</span>
+                    <span className="kv-value amount">{formatVND(selectedInvoice.paidAmount || selectedInvoice.totalAmount)}</span>
+                  </div>
+                  {!selectedInvoice.isPaid && (
+                    <div className="kv-row">
+                      <span className="kv-label">Số tiền còn thiếu</span>
+                      <span className="kv-value amount text-danger">
+                        {formatVND(Math.max(0, Number(selectedInvoice.totalAmount || 0) - Number(selectedInvoice.paidAmount || 0)))}
+                      </span>
+                    </div>
+                  )}
+                  {selectedInvoice.paidAt && (
+                    <div className="kv-row">
+                      <span className="kv-label">Ngày thanh toán</span>
+                      <span className="kv-value">{formatDate(selectedInvoice.paidAt)}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
             <Divider style={{ margin: '16px 0' }} />
-            
-            <Alert 
+
+            <Alert
+              className="alert-block"
               message="Thời hạn đóng tiền"
-              description="Vui lòng hoàn tất thanh toán trong vòng 5 ngày kể từ khi hóa đơn được xuất để tránh chậm trễ."
+              description={selectedInvoice.dueDate
+                ? `Vui lòng hoàn tất thanh toán trước ngày ${new Date(`${selectedInvoice.dueDate}T00:00:00`).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}.`
+                : 'Vui lòng hoàn tất thanh toán trong vòng 5 ngày kể từ khi hóa đơn được xuất để tránh chậm trễ.'}
               type="info"
               showIcon
-              style={{ borderRadius: '8px' }}
             />
           </div>
         )}
@@ -191,18 +342,18 @@ const TenantInvoices = () => {
 
       {/* MODAL 2: THANH TOÁN QUA VIETQR */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px' }}>Quét mã VietQR chuyển khoản</span>}
+        title="Quét mã VietQR chuyển khoản"
         open={qrModalVisible}
-        onCancel={() => setQrModalVisible(false)}
+        onCancel={closeQR}
         footer={[
-          <Button key="back" style={{ borderRadius: '8px' }} onClick={() => setQrModalVisible(false)}>
+          <Button key="back" onClick={closeQR}>
             Quay lại
           </Button>,
-          <Button 
+          <Button
             key="download"
-            icon={<Download size={14} />} 
-            type="primary" 
-            style={{ background: '#10b981', border: 'none', borderRadius: '8px' }}
+            icon={<Download size={14} />}
+            type="primary"
+            className="btn-success"
             onClick={() => {
               if (selectedInvoice?.qrCodeUrl) {
                 window.open(selectedInvoice.qrCodeUrl, '_blank');
@@ -216,27 +367,21 @@ const TenantInvoices = () => {
         centered
       >
         {selectedInvoice && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '15px 0' }}>
-            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
-              <img 
-                src={selectedInvoice.qrCodeUrl} 
-                alt="VietQR Code" 
-                style={{ width: '220px', height: '220px', display: 'block', borderRadius: '8px' }}
-              />
+          <div className="qr-modal">
+            <div className="qr-box">
+              <img src={selectedInvoice.qrCodeUrl} alt="VietQR Code" />
             </div>
-            
-            <div style={{ textAlign: 'center', width: '100%' }}>
-              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Số tiền cần chuyển khoản</div>
-              <div style={{ fontSize: '22px', fontWeight: '800', color: '#ef4444', marginBottom: '12px' }}>
-                {formatVND(selectedInvoice.totalAmount)}
+
+            <div className="modal-summary">
+              <div className="list-row-sub">Số tiền cần chuyển khoản</div>
+              <div className="amount amount-lg text-danger">
+                {formatVND(Math.max(0, Number(selectedInvoice.totalAmount || 0) - Number(selectedInvoice.paidAmount || 0)))}
               </div>
             </div>
 
-            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px', width: '100%' }}>
-              <div style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px', letterSpacing: '0.5px' }}>
-                Hướng dẫn thanh toán
-              </div>
-              <ol style={{ fontSize: '13px', color: '#1e3a8a', paddingLeft: '16px', margin: 0, lineHeight: '1.5' }}>
+            <div className="guide-box">
+              <div className="guide-box-title">Hướng dẫn thanh toán</div>
+              <ol>
                 <li>Mở ứng dụng ngân hàng di động của bạn.</li>
                 <li>Chọn chức năng <strong>Quét mã QR</strong>.</li>
                 <li>Quét mã QR phía trên. Hệ thống ngân hàng sẽ tự động điền số tài khoản, số tiền và nội dung chuyển khoản.</li>

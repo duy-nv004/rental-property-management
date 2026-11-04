@@ -1,0 +1,16 @@
+/* Responsive riêng cho trang khách thuê (phone) */
+@media (max-width: 767px) {
+  /* Alert có nút hành động: đẩy nút xuống dòng, full width cho dễ chạm */
+  .tenant-page .alert-block.ant-alert { flex-wrap: wrap; }
+  .tenant-page .alert-block .ant-alert-actions { flex-basis: 100%; margin-inline-start: 0; margin-top: 12px; }
+  .tenant-page .alert-block .ant-alert-actions .ant-btn { width: 100%; }
+  /* Vùng chạm >= 44px cho hành động chính */
+  .tenant-page .ant-alert-actions .ant-btn,
+  .tenant-page .stat-action.ant-btn,
+  .tenant-page .list-actions .ant-btn,
+  .tenant-page .sign-pending-actions .ant-btn,
+  .tenant-page .tenant-actions .ant-btn,
+  .tenant-page .ant-card-extra .ant-btn { min-height: 44px; }
+  /* Tiêu đề card + nút extra xuống dòng khi chật */
+  .tenant-page .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 8px; }
+}

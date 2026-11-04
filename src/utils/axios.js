@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { message } from 'antd';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL, 
@@ -33,8 +34,12 @@ axiosInstance.interceptors.response.use(
 
     // Token hết hạn / không hợp lệ / tài khoản bị khóa: xóa phiên và đưa về trang đăng nhập.
     // Trước đây chỉ console.error nên người dùng bị kẹt ở màn hình trắng.
-    if (status === 401) {
-      localStorage.clear();
+    const data = error.response?.data;
+    const locked = status === 403 && (data?.code === 'ACCOUNT_LOCKED'
+      || (typeof data?.message === 'string' && data.message.startsWith('Tài khoản của bạn đã bị khóa')));
+    if (status === 401 || locked) {
+      if (locked) message.error(data.message || 'Tài khoản của bạn đã bị khóa.');
+      ['accessToken', 'role', 'username', 'user'].forEach((k) => localStorage.removeItem(k));
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }

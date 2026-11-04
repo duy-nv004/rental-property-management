@@ -12,6 +12,7 @@ import LandlordList from '../pages/admin/LandlordList';
 import PackageSettings from '../pages/admin/PackageSettings';
 import ActivityLogs from '../pages/admin/ActivityLogs';
 import TicketManager from '../pages/admin/TicketManager';
+import AdminProfile from '../pages/admin/Profile';
 
 // Pages - Landlord
 import LandlordDashboard from '../pages/landlord/Dashboard'; // Trang Dashboard của chủ nhà
@@ -23,6 +24,7 @@ import ContractManager from '../pages/landlord/ContractManager';
 import SupportManager from '../pages/landlord/SupportManager';
 import LandlordProfile from '../pages/landlord/Profile';
 import Plans from '../pages/landlord/Plans';
+import InvoiceManager from '../pages/landlord/InvoiceManager';
 
 // Pages - Tenant
 import TenantDashboard from '../pages/tenant/Dashboard';
@@ -50,6 +52,7 @@ const ThemeRoutes = () => {
         { path: 'packages', element: <PackageSettings /> },
         { path: 'logs', element: <ActivityLogs /> },
         { path: 'tickets', element: <TicketManager /> },
+        { path: 'profile', element: <AdminProfile /> },
         { path: '', element: <Navigate to="dashboard" /> },
       ],
     },
@@ -69,6 +72,7 @@ const ThemeRoutes = () => {
         // Đường dẫn cũ, giữ lại để bookmark cũ không bị 404
         { path: 'rooms', element: <Navigate to="/landlord/buildings" replace /> },
         { path: 'utilities', element: <UtilityManagement /> }, // Phần điện nước
+        { path: 'invoices', element: <InvoiceManager /> },
         { path: 'financials', element: <Financials /> },
         { path: 'contracts', element: <ContractManager /> },
         { path: 'support', element: <SupportManager /> },

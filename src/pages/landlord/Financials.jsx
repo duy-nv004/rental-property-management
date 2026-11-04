@@ -1,18 +1,33 @@
-import { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Table, Tag, Select, Space, Spin, message, Alert } from 'antd';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Landmark, ArrowUpRight, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Row, Col, Card, Select, Spin, message, Alert, Empty } from 'antd';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { Wallet, TrendingUp, AlertCircle, Lightbulb, CheckCircle2 } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
+import PageHeader from '../../components/admin/PageHeader';
+
+const BAR_COLORS = ['#94A3B8', '#0F766E', '#DC2626'];
+
+const StatCard = ({ label, value, icon, tint, note }) => (
+  <Card className="stat-card">
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+      <div style={{ minWidth: 0 }}>
+        <div className="stat-label">{label}</div>
+        <div className="stat-value" style={{ fontSize: 22 }}>{value}</div>
+        {note && <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>{note}</div>}
+      </div>
+      <div className="stat-icon" style={{ background: tint + '14', color: tint }} aria-hidden="true">{icon}</div>
+    </div>
+  </Card>
+);
 
 const Financials = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
-  
-  // Mặc định là tháng hiện tại (có thể đổi sang 'all' nếu muốn)
+
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     setLoading(true);
     try {
       const data = await axiosInstance.get(`/invoices/status?month=${selectedMonth}&year=${selectedYear}`);
@@ -23,24 +38,23 @@ const Financials = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
     fetchStats();
-  }, [selectedMonth, selectedYear]);
+  }, [fetchStats]);
 
-  // Danh sách năm sinh động: năm hiện tại và 4 năm trước đó.
-  // Hardcode [2026, 2025] khiến sang năm sau không chọn được năm hiện tại,
-  // nên hóa đơn mới xuất sẽ không xem được trên màn thống kê.
+  // Danh sách năm: năm hiện tại và 4 năm trước đó
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => {
     const y = currentYear - i;
     return { value: y, label: `Năm ${y}` };
   });
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
-  };
+  const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
+
+  const periodLabel = selectedMonth === 'all' ? `năm ${selectedYear}` : `tháng ${selectedMonth}/${selectedYear}`;
+  const collectionRate = stats?.totalExpected > 0 ? ((stats.totalCollected / stats.totalExpected) * 100).toFixed(1) : 0;
 
   const chartData = stats ? [
     { name: 'Kỳ vọng', amount: stats.totalExpected },
@@ -50,133 +64,111 @@ const Financials = () => {
 
   return (
     <div>
-      {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: 'bold' }}>QUẢN LÝ / DOANH THU</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#1a3353', margin: 0 }}>Thống kê Tài chính</h1>
-        </div>
-        <Space>
-          <Select
-            value={selectedMonth}
-            style={{ width: 110 }}
-            onChange={(val) => setSelectedMonth(val)}
-            options={[
-              { value: 'all', label: 'Cả năm' },
-              ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
-            ]}
-          />
-          <Select
-            value={selectedYear}
-            style={{ width: 110 }}
-            onChange={(val) => setSelectedYear(val)}
-            options={yearOptions}
-          />
-        </Space>
-      </div>
+      <PageHeader
+        title="Thống kê tài chính"
+        description="Doanh thu, tỷ lệ thu tiền và nợ đọng theo từng kỳ."
+        onRefresh={fetchStats}
+        refreshLoading={loading}
+        extra={
+          <div className="toolbar-wrap">
+            <Select
+              aria-label="Chọn tháng"
+              value={selectedMonth}
+              style={{ minWidth: 120 }}
+              onChange={setSelectedMonth}
+              options={[
+                { value: 'all', label: 'Cả năm' },
+                ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
+              ]}
+            />
+            <Select aria-label="Chọn năm" value={selectedYear} style={{ minWidth: 120 }} onChange={setSelectedYear} options={yearOptions} />
+          </div>
+        }
+      />
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-          <Spin size="large" tip="Đang tính toán số liệu tài chính..." />
-        </div>
+        <div style={{ display: 'grid', placeItems: 'center', height: '50vh' }}><Spin size="large" /></div>
       ) : (
-        <div>
-          <Row gutter={[24, 24]} style={{ marginBottom: '24px' }}>
-            {/* TỔNG KỲ VỌNG */}
-            <Col xs={24} sm={8}>
-              <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '20px' }}>
-                <Statistic 
-                  title={<span style={{ fontSize: '12px', fontWeight: 'bold', color: '#8c8c8c' }}>TỔNG DOANH THU KỲ VỌNG</span>} 
-                  value={stats?.totalExpected} 
-                  formatter={(val) => formatVND(val)}
-                  valueStyle={{ color: '#1a3353', fontWeight: '800', fontSize: '22px' }} 
-                />
-                <div style={{ color: '#1890ff', fontSize: '12px', marginTop: '6px', fontWeight: '500' }}>
-                  Tổng hóa đơn xuất trong tháng
-                </div>
-              </Card>
+        <>
+          <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+            <Col xs={24} md={8}>
+              <StatCard
+                label="Tổng doanh thu kỳ vọng"
+                value={formatVND(stats?.totalExpected)}
+                icon={<TrendingUp size={20} />}
+                tint="#0369A1"
+                note="Tổng hóa đơn đã xuất trong kỳ"
+              />
             </Col>
-
-            {/* THỰC THU */}
-            <Col xs={24} sm={8}>
-              <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '20px' }}>
-                <Statistic 
-                  title={<span style={{ fontSize: '12px', fontWeight: 'bold', color: '#8c8c8c' }}>ĐÃ THU THỰC TẾ (ĐÃ ĐÓNG)</span>} 
-                  value={stats?.totalCollected} 
-                  formatter={(val) => formatVND(val)}
-                  valueStyle={{ color: '#52c41a', fontWeight: '800', fontSize: '22px' }} 
-                />
-                <div style={{ color: '#52c41a', fontSize: '12px', marginTop: '6px', fontWeight: '500' }}>
-                  Hiệu suất: {stats?.totalExpected > 0 ? ((stats.totalCollected / stats.totalExpected) * 100).toFixed(1) : 0}%
-                </div>
-              </Card>
+            <Col xs={24} md={8}>
+              <StatCard
+                label="Đã thu thực tế"
+                value={formatVND(stats?.totalCollected)}
+                icon={<Wallet size={20} />}
+                tint="#0F766E"
+                note={`Hiệu suất thu tiền: ${collectionRate}%`}
+              />
             </Col>
-
-            {/* NỢ ĐỌNG */}
-            <Col xs={24} sm={8}>
-              <Card bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} bodyStyle={{ padding: '20px' }}>
-                <Statistic 
-                  title={<span style={{ fontSize: '12px', fontWeight: 'bold', color: '#8c8c8c' }}>TIỀN PHÒNG NỢ ĐỌNG</span>} 
-                  value={stats?.unpaidAmount} 
-                  formatter={(val) => formatVND(val)}
-                  valueStyle={{ color: '#ff4d4f', fontWeight: '800', fontSize: '22px' }} 
-                />
-                <div style={{ color: '#ff4d4f', fontSize: '12px', marginTop: '6px', fontWeight: '500' }}>
-                  Có <strong>{stats?.unpaidRooms}</strong> phòng chưa hoàn tất thanh toán
-                </div>
-              </Card>
+            <Col xs={24} md={8}>
+              <StatCard
+                label="Tiền phòng nợ đọng"
+                value={formatVND(stats?.unpaidAmount)}
+                icon={<AlertCircle size={20} />}
+                tint="#DC2626"
+                note={`${stats?.unpaidRooms ?? 0} phòng chưa hoàn tất thanh toán`}
+              />
             </Col>
           </Row>
 
-          <Row gutter={[24, 24]}>
-            {/* BIỂU ĐỒ BÁO CÁO */}
-            <Col xs={24} md={12}>
-              <Card title={<span style={{ fontWeight: '800', fontSize: '14px' }}>Biểu đồ Cơ cấu Doanh thu ({selectedMonth === 'all' ? `Năm ${selectedYear}` : `Tháng ${selectedMonth}/${selectedYear}`})</span>} bordered={false} style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-                <div style={{ height: 260 }}>
+          <Row gutter={[20, 20]}>
+            <Col xs={24} lg={14}>
+              <Card title={<span className="card-title">Cơ cấu doanh thu {periodLabel}</span>} style={{ height: '100%' }}>
+                <div style={{ height: 280 }} role="img" aria-label={`Biểu đồ doanh thu ${periodLabel}: kỳ vọng ${formatVND(stats?.totalExpected)}, đã thu ${formatVND(stats?.totalCollected)}, chưa thu ${formatVND(stats?.unpaidAmount)}`}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" />
-                      <YAxis tickFormatter={(val) => val / 1000000 + 'M'} />
-                      <Tooltip formatter={(value) => [formatVND(value), 'Số tiền']} />
-                      <Bar dataKey="amount" fill="#1a3353" radius={[8, 8, 0, 0]} barSize={40} />
+                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEF2F6" />
+                      <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 13 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: '#64748B', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(val) => val ? (val / 1000000) + 'M' : '0'} />
+                      <Tooltip cursor={{ fill: '#F8FAFC' }} formatter={(value) => [formatVND(value), 'Số tiền']} />
+                      <Bar dataKey="amount" radius={[6, 6, 0, 0]} barSize={48}>
+                        {chartData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i]} />)}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </Card>
             </Col>
 
-            {/* NHẬT KÝ CHI TIẾT */}
-            <Col xs={24} md={12}>
-              <Card 
-                title={<span style={{ fontWeight: '800', fontSize: '14px' }}>Khuyến nghị Tài chính</span>} 
-                bordered={false} 
-                style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', height: '100%' }}
-              >
-                {stats?.unpaidAmount > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Col xs={24} lg={10}>
+              <Card title={<span className="card-title">Khuyến nghị tài chính</span>} style={{ height: '100%' }}>
+                {stats?.invoiceCount === 0 ? (
+                  <Empty description="Chưa có hóa đơn nào cho kỳ này" style={{ padding: '32px 0' }} />
+                ) : stats?.unpaidAmount > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <Alert
-                      message="Cảnh báo nợ đọng cao"
-                      description={`Tháng này có ${stats.unpaidRooms} phòng chưa đóng tiền với tổng nợ đọng là ${formatVND(stats.unpaidAmount)}. Vui lòng gửi thông báo nhắc đóng tiền qua Telegram.`}
                       type="error"
                       showIcon
-                      style={{ borderRadius: '8px' }}
+                      message="Cảnh báo nợ đọng"
+                      description={`Kỳ này có ${stats.unpaidRooms} phòng chưa đóng tiền, tổng nợ ${formatVND(stats.unpaidAmount)}. Nên gửi nhắc đóng tiền qua Telegram.`}
                     />
-                    <div style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6' }}>
-                      💡 <strong>Mẹo giảm nợ đọng:</strong> Hãy kích hoạt gửi thông báo hàng loạt tới khách thuê có liên kết Bot Telegram. Khi khách thuê thanh toán, bạn chỉ cần bấm "Xác nhận đã nhận tiền" trên hóa đơn, hệ thống sẽ tự động gạch nợ.
+                    <div style={{ display: 'flex', gap: 10, fontSize: 14, color: '#475569', lineHeight: 1.6 }}>
+                      <Lightbulb size={18} color="#B45309" style={{ flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
+                      <span>
+                        <b style={{ color: '#0F172A' }}>Mẹo giảm nợ đọng:</b> Gửi thông báo hàng loạt tới khách thuê đã liên kết Bot Telegram. Khi khách thanh toán, bấm &quot;Xác nhận đã nhận tiền&quot; trên hóa đơn để hệ thống tự gạch nợ.
+                      </span>
                     </div>
                   </div>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <CheckCircle2 size={48} color="#52c41a" style={{ margin: '0 auto 12px auto' }} />
-                    <h3 style={{ fontWeight: 'bold', color: '#52c41a' }}>Tài chính tuyệt vời!</h3>
-                    <p style={{ color: '#8c8c8c', fontSize: '13px', margin: 0 }}>Tất cả các hóa đơn được xuất trong chu kỳ này đều đã hoàn tất thanh toán.</p>
+                    <CheckCircle2 size={44} color="#15803D" style={{ marginBottom: 12 }} aria-hidden="true" />
+                    <h3 style={{ fontWeight: 700, color: '#15803D', margin: '0 0 4px' }}>Không có nợ đọng</h3>
+                    <p style={{ color: '#475569', fontSize: 14, margin: 0 }}>Tất cả hóa đơn trong kỳ này đã hoàn tất thanh toán.</p>
                   </div>
                 )}
               </Card>
             </Col>
           </Row>
-        </div>
+        </>
       )}
     </div>
   );

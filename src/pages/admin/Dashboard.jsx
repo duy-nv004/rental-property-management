@@ -1,61 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Card, Progress, Spin, message } from 'antd';
-import { Users, Wallet, CheckCircle2, TrendingUp, ArrowUpRight } from 'lucide-react';
+import { Row, Col, Card, Progress, Spin, Empty, message } from 'antd';
+import { Users, Wallet, CheckCircle2, TrendingUp, Activity } from 'lucide-react';
 import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 
 // ─── Sub-components ─────────────────────────────────────────────────────────────
 
-const StatCard = ({ title, value, subtitle, icon, gradient }) => (
-  <Card
-    bordered={false}
-    style={{
-      borderRadius: '16px',
-      background: gradient,
-      border: 'none',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-      overflow: 'hidden',
-      position: 'relative',
-    }}
-    bodyStyle={{ padding: '24px' }}
-  >
-    {/* Decorative circle */}
-    <div style={{
-      position: 'absolute', top: -20, right: -20,
-      width: 100, height: 100, borderRadius: '50%',
-      background: 'rgba(255,255,255,0.08)',
-    }} />
-
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
-      <div style={{
-        background: 'rgba(255,255,255,0.2)',
-        padding: '10px',
-        borderRadius: '12px',
-        backdropFilter: 'blur(4px)',
-      }}>
-        {icon}
+const StatCard = ({ title, value, subtitle, icon, tint }) => (
+  <Card className="stat-card">
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ minWidth: 0 }}>
+        <div className="stat-label">{title}</div>
+        <div className="stat-value">{value}</div>
+        {subtitle && <div className="stat-sub">{subtitle}</div>}
       </div>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        background: 'rgba(255,255,255,0.15)',
-        padding: '4px 10px',
-        borderRadius: '20px',
-      }}>
-        <ArrowUpRight size={12} color="white" />
-        <span style={{ fontSize: '11px', fontWeight: '700', color: 'white' }}>{subtitle}</span>
-      </div>
-    </div>
-
-    <div style={{ marginTop: '20px', position: 'relative' }}>
-      <div style={{ fontSize: '30px', fontWeight: '900', color: 'white', lineHeight: 1 }}>
-        {value}
-      </div>
-      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', fontWeight: '600', letterSpacing: '0.5px' }}>
-        {title}
-      </div>
+      <div className="stat-icon" style={{ background: tint.bg, color: tint.fg }} aria-hidden="true">{icon}</div>
     </div>
   </Card>
 );
@@ -65,27 +25,18 @@ StatCard.propTypes = {
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
   subtitle: PropTypes.string,
   icon: PropTypes.node,
-  gradient: PropTypes.string,
+  tint: PropTypes.shape({ bg: PropTypes.string, fg: PropTypes.string }),
 };
 
 const PlanBar = ({ label, count, percent, color }) => (
-  <div style={{ marginBottom: '20px' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-      <span style={{ fontSize: '12px', fontWeight: '700', color: '#334155', letterSpacing: '0.3px' }}>
-        {label}
-      </span>
-      <span style={{ fontSize: '12px', fontWeight: '700', color }}>
-        {percent}% &nbsp;<span style={{ color: '#94a3b8', fontWeight: '400' }}>({count} chủ nhà)</span>
+  <div style={{ marginBottom: 20 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
+      <span style={{ fontWeight: 600, color: '#334155' }}>{label}</span>
+      <span style={{ fontWeight: 600, color: '#0F172A' }}>
+        {percent}% <span style={{ color: '#64748B', fontWeight: 400 }}>· {count} chủ nhà</span>
       </span>
     </div>
-    <Progress
-      percent={percent}
-      strokeColor={color}
-      trailColor="#f1f5f9"
-      showInfo={false}
-      strokeWidth={10}
-      style={{ borderRadius: '99px' }}
-    />
+    <Progress percent={percent} strokeColor={color} trailColor="#F1F5F9" showInfo={false} size={['100%', 10]} />
   </div>
 );
 
@@ -96,37 +47,25 @@ PlanBar.propTypes = {
   color: PropTypes.string,
 };
 
-const ActivityItem = ({ log }) => {
-  const actionColors = {
-    UPDATE_PLAN: { bg: '#eff6ff', icon: '#3b82f6', dot: '#3b82f6' },
-    LOCK_USER: { bg: '#fef2f2', icon: '#ef4444', dot: '#ef4444' },
-    UNLOCK_USER: { bg: '#f0fdf4', icon: '#22c55e', dot: '#22c55e' },
-  };
-  const style = actionColors[log.action] || { bg: '#f8fafc', icon: '#64748b', dot: '#64748b' };
-
-  return (
-    <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'flex-start' }}>
-      <div style={{
-        width: '36px', height: '36px', borderRadius: '10px',
-        background: style.bg, display: 'flex', alignItems: 'center',
-        justifyContent: 'center', flexShrink: 0,
-      }}>
-        <div style={{ width: 10, height: 10, borderRadius: '50%', background: style.dot }} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', lineHeight: '1.3' }}>
-          {log.label}
-        </div>
-        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {log.sub}
-        </div>
-        <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
-          {log.time}
-        </div>
-      </div>
-    </div>
-  );
+const ACTION_COLORS = {
+  UPDATE_PLAN: '#0369A1',
+  LOCK_USER: '#DC2626',
+  UNLOCK_USER: '#15803D',
 };
+
+const ActivityItem = ({ log }) => (
+  <div style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid #F1F5F9' }}>
+    <span
+      aria-hidden="true"
+      style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 6, flexShrink: 0, background: ACTION_COLORS[log.action] || '#64748B' }}
+    />
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{log.label}</div>
+      <div style={{ fontSize: 13, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.sub}</div>
+      <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{log.time}</div>
+    </div>
+  </div>
+);
 
 ActivityItem.propTypes = {
   log: PropTypes.shape({
@@ -163,8 +102,8 @@ const Dashboard = () => {
 
   if (loading || !data) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-        <Spin size="large" tip="Đang tải dữ liệu hệ thống..." />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <Spin size="large" />
       </div>
     );
   }
@@ -177,110 +116,75 @@ const Dashboard = () => {
 
   const statCards = [
     {
-      title: 'DOANH THU GÓI CƯỚC HÀNG THÁNG (MRR)',
-      value: `$${Number(stats.totalRevenue).toLocaleString('en-US')}`,
-      subtitle: 'Từ gói chủ nhà',
-      icon: <Wallet size={20} color="white" />,
-      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      title: 'Doanh thu ước tính (theo gói đang hoạt động)',
+      value: new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(stats.totalRevenue) || 0),
+      subtitle: 'Từ gói chủ nhà (MRR)',
+      icon: <Wallet size={20} />,
+      tint: { bg: '#F0FDFA', fg: '#0F766E' },
     },
     {
-      title: 'CHỦ NHÀ ĐÃ XÁC THỰC',
+      title: 'Chủ nhà đã xác thực',
       value: stats.landlordCount,
       subtitle: 'Đang hoạt động',
-      icon: <CheckCircle2 size={20} color="white" />,
-      gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+      icon: <CheckCircle2 size={20} />,
+      tint: { bg: '#F0F9FF', fg: '#0369A1' },
     },
     {
-      title: 'GÓI TRẢ PHÍ KÍCH HOẠT',
+      title: 'Gói trả phí kích hoạt',
       value: (packages.basic || 0) + (packages.pro || 0),
       subtitle: 'Basic & Pro',
-      icon: <Users size={20} color="white" />,
-      gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      icon: <Users size={20} />,
+      tint: { bg: '#F0FDF4', fg: '#15803D' },
     },
   ];
 
   return (
     <div>
       <PageHeader
-        title="Tổng quan Hệ thống"
-        description="Số liệu giám sát thời gian thực các gói cước và chủ nhà trong hệ thống."
+        title="Tổng quan hệ thống"
+        description="Số liệu giám sát các gói cước và chủ nhà trong hệ thống."
         onRefresh={() => fetchStats(true)}
         refreshLoading={refreshLoading}
       />
 
-      {/* Stat Cards */}
-      <Row gutter={[24, 24]}>
-        {statCards.map((card, i) => (
-          <Col xs={24} md={8} key={i}>
+      <Row gutter={[20, 20]}>
+        {statCards.map((card) => (
+          <Col xs={24} md={8} key={card.title}>
             <StatCard {...card} />
           </Col>
         ))}
       </Row>
 
-      <Row gutter={[24, 24]} style={{ marginTop: '24px' }}>
-        {/* Package Distribution */}
+      <Row gutter={[20, 20]} style={{ marginTop: 20 }}>
         <Col xs={24} lg={16}>
           <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <TrendingUp size={18} color="#6366f1" />
-                <span style={{ fontWeight: '700', color: '#0f172a' }}>Phân bổ Gói Cước</span>
-              </div>
-            }
-            extra={
-              <span style={{ fontSize: '12px', color: '#64748b' }}>
-                Tổng: <b>{packages.total}</b> chủ nhà
-              </span>
-            }
-            bordered={false}
-            style={{ borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}
+            title={<span className="card-title"><TrendingUp size={18} color="#0F766E" aria-hidden="true" /> Phân bổ gói cước</span>}
+            extra={<span style={{ fontSize: 13, color: '#475569' }}>Tổng: <b>{packages.total}</b> chủ nhà</span>}
+            style={{ height: '100%' }}
           >
-            <PlanBar label="GÓI CHUYÊN NGHIỆP (PRO)" count={packages.pro} percent={proPercent} color="#6366f1" />
-            <PlanBar label="GÓI CƠ BẢN (BASIC)" count={packages.basic} percent={basicPercent} color="#0ea5e9" />
-            <PlanBar label="GÓI MIỄN PHÍ (FREE)" count={packages.free} percent={freePercent} color="#94a3b8" />
+            <PlanBar label="Chuyên nghiệp (Pro)" count={packages.pro} percent={proPercent} color="#0F766E" />
+            <PlanBar label="Cơ bản (Basic)" count={packages.basic} percent={basicPercent} color="#14B8A6" />
+            <PlanBar label="Miễn phí (Free)" count={packages.free} percent={freePercent} color="#94A3B8" />
 
-            {/* Conversion summary */}
-            <div style={{
-              background: 'linear-gradient(135deg, #f8faff 0%, #eff6ff 100%)',
-              padding: '20px', borderRadius: '12px',
-              border: '1px solid #e0e7ff',
-              display: 'flex', alignItems: 'center', gap: '16px',
-              marginTop: '8px',
-            }}>
-              <div style={{
-                width: '64px', height: '64px', borderRadius: '16px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: '900', fontSize: '20px', color: 'white', flexShrink: 0,
-              }}>
-                {proPercent + basicPercent}%
-              </div>
+            <div className="callout">
+              <div className="callout-value">{proPercent + basicPercent}%</div>
               <div>
-                <div style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a' }}>Tỷ lệ Chuyển đổi Trả phí</div>
-                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-                  Tỷ lệ chủ nhà nâng cấp gói dịch vụ trả phí (Pro & Basic) — cải thiện doanh thu biên.
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0F172A' }}>Tỷ lệ chuyển đổi trả phí</div>
+                <div style={{ fontSize: 13, color: '#475569', marginTop: 2 }}>
+                  Tỷ lệ chủ nhà đã nâng cấp lên gói trả phí (Pro & Basic).
                 </div>
               </div>
             </div>
           </Card>
         </Col>
 
-        {/* Recent Activity */}
         <Col xs={24} lg={8}>
           <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 0 2px rgba(34,197,94,0.3)' }} />
-                <span style={{ fontWeight: '700', color: '#0f172a' }}>Nhật ký gần đây</span>
-              </div>
-            }
-            bordered={false}
-            style={{ borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', height: '100%' }}
+            title={<span className="card-title"><Activity size={18} color="#0F766E" aria-hidden="true" /> Hoạt động gần đây</span>}
+            style={{ height: '100%' }}
           >
             {recentActivity.length === 0 ? (
-              <div style={{ color: '#94a3b8', textAlign: 'center', padding: '40px 0', fontSize: '13px' }}>
-                Chưa có hoạt động nào được ghi nhận
-              </div>
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có hoạt động nào" />
             ) : (
               recentActivity.map((act, i) => <ActivityItem key={i} log={act} />)
             )}

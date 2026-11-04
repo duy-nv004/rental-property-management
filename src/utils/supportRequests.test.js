@@ -1,0 +1,93 @@
+/**
+ * Unit test cho logic thuần của màn xử lý sự cố (src/utils/supportRequests.js).
+ * Chạy: npm test
+ */
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { sortSupportRequests, supportStats, filterSupportRequests } from './supportRequests.js';
+
+const r = (id, status, severity, createdAt, extra = {}) => ({ id, status, severity, createdAt, ...extra });
+
+describe('sortSupportRequests', () => {
+  test('chờ xử lý lên đầu, rồi đang sửa, đã xong xuống cuối', () => {
+    const list = [
+      r(1, 'resolved', 'high', '2026-10-05'),
+      r(2, 'in_progress', 'low', '2026-10-01'),
+      r(3, 'pending', 'low', '2026-10-01'),
+    ];
+    assert.deepEqual(sortSupportRequests(list).map(x => x.id), [3, 2, 1]);
+  });
+
+  test('cùng trạng thái thì mức nghiêm trọng cao lên trước', () => {
+    const list = [
+      r(1, 'pending', 'low', '2026-10-05'),
+      r(2, 'pending', 'high', '2026-10-01'),
+      r(3, 'pending', 'medium', '2026-10-03'),
+    ];
+    assert.deepEqual(sortSupportRequests(list).map(x => x.id), [2, 3, 1]);
+  });
+
+  test('cùng trạng thái và mức độ thì mới nhất lên trước', () => {
+    const list = [r(1, 'pending', 'high', '2026-10-01'), r(2, 'pending', 'high', '2026-10-09')];
+    assert.deepEqual(sortSupportRequests(list).map(x => x.id), [2, 1]);
+  });
+
+  test('không làm thay đổi mảng gốc', () => {
+    const list = [r(1, 'resolved', 'low', '2026-10-01'), r(2, 'pending', 'high', '2026-10-01')];
+    sortSupportRequests(list);
+    assert.deepEqual(list.map(x => x.id), [1, 2]);
+  });
+});
+
+describe('supportStats', () => {
+  test('đếm theo trạng thái và số sự cố nghiêm trọng chưa xong', () => {
+    const list = [
+      r(1, 'pending', 'high', 'x'),
+      r(2, 'in_progress', 'high', 'x'),
+      r(3, 'resolved', 'high', 'x'),
+      r(4, 'pending', 'low', 'x'),
+    ];
+    assert.deepEqual(supportStats(list), { total: 4, pending: 2, inProgress: 1, resolved: 1, highOpen: 2 });
+  });
+
+  test('danh sách rỗng hoặc không phải mảng trả toàn 0', () => {
+    const zero = { total: 0, pending: 0, inProgress: 0, resolved: 0, highOpen: 0 };
+    assert.deepEqual(supportStats([]), zero);
+    assert.deepEqual(supportStats(null), zero);
+  });
+});
+
+describe('filterSupportRequests', () => {
+  const list = [
+    r(1, 'pending', 'high', 'x', {
+      description: 'Ổ điện cháy', tenant: { name: 'Nguyễn Văn An', phone: '0901234567' },
+      room: { roomNumber: '101', building: { id: 7, name: 'Sunshine' } },
+    }),
+    r(2, 'pending', 'low', 'x', {
+      description: 'Vòi nước rò', tenant: { name: 'Trần Bình', phone: '0987654321' },
+      room: { roomNumber: '202', building: { id: 8, name: 'Moonlight' } },
+    }),
+  ];
+
+  test('không có điều kiện thì giữ nguyên', () => {
+    assert.equal(filterSupportRequests(list, {}).length, 2);
+  });
+
+  test('tìm theo tên khách không phân biệt hoa thường và dấu', () => {
+    assert.deepEqual(filterSupportRequests(list, { search: 'nguyen van' }).map(x => x.id), [1]);
+  });
+
+  test('tìm theo SĐT, số phòng hoặc mô tả', () => {
+    assert.deepEqual(filterSupportRequests(list, { search: '0987' }).map(x => x.id), [2]);
+    assert.deepEqual(filterSupportRequests(list, { search: '101' }).map(x => x.id), [1]);
+    assert.deepEqual(filterSupportRequests(list, { search: 'vòi' }).map(x => x.id), [2]);
+  });
+
+  test('lọc theo tòa nhà', () => {
+    assert.deepEqual(filterSupportRequests(list, { buildingId: 8 }).map(x => x.id), [2]);
+  });
+
+  test('bản ghi thiếu tenant/room không làm lỗi', () => {
+    assert.deepEqual(filterSupportRequests([r(3, 'pending', 'low', 'x')], { search: 'abc' }), []);
+  });
+});

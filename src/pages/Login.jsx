@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Form, Input, Button, message, Card, Modal } from 'antd';
-import { Mail, Lock, Building, ArrowRight, Send } from 'lucide-react';
+import { Form, Input, Button, message, Modal } from 'antd';
+import { Mail, Lock, ArrowRight, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../utils/axios';
+import AuthLayout from '../components/common/AuthLayout';
 
 const Login = () => {
   const [loading, setLoading] = useState(false);
   const [tenantModalVisible, setTenantModalVisible] = useState(false);
-  const [telegramLink, setTelegramLink] = useState('');
+  const [telegramLink] = useState('');
   const navigate = useNavigate();
   const [appealModalVisible, setAppealModalVisible] = useState(false);
   const [appealLoading, setAppealLoading] = useState(false);
@@ -83,189 +84,63 @@ const Login = () => {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f6f8fb', fontFamily: 'Inter, sans-serif' }}>
-      
-      {/* Cột trái: Giới thiệu hệ thống (Chỉ hiển thị trên màn hình máy tính) */}
-      <div style={{
-        flex: 1.2,
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        padding: '60px',
-        color: '#fff',
-        overflow: 'hidden'
-      }} className="login-banner">
-        {/* Lớp nền mờ nhẹ dạng lưới */}
-        <div style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundImage: 'radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%), radial-gradient(circle at 20% 80%, rgba(20, 184, 166, 0.1) 0%, transparent 50%)',
-          zIndex: 1
-        }} />
+    <AuthLayout
+      heading="Quản lý nhà trọ & căn hộ dịch vụ thông minh"
+      description="Số hóa toàn bộ quy trình vận hành: quản lý tòa nhà, tự động lập hóa đơn và gửi thông báo tới người thuê chỉ trong vài giây."
+      title="Đăng nhập"
+      subtitle="Đăng nhập tài khoản của bạn để tiếp tục."
+    >
+      <Form name="login_form" layout="vertical" onFinish={onFinish} requiredMark={false} size="large">
+        <Form.Item
+          name="identity"
+          label="Email hoặc số điện thoại"
+          rules={[{ required: true, message: 'Vui lòng nhập Email hoặc Số điện thoại!' }]}
+        >
+          <Input prefix={<Mail size={18} color="#64748B" aria-hidden="true" />} placeholder="ban@example.com" autoComplete="username" />
+        </Form.Item>
 
-        <div style={{ zIndex: 2, display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.08)',
-            padding: '10px',
-            borderRadius: '12px',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Building size={24} color="#38bdf8" />
-          </div>
-          <div>
-            <div style={{ fontWeight: 'bold', fontSize: '18px', letterSpacing: '1px' }}>EXECUTIVE LENS</div>
-            <div style={{ fontSize: '9px', color: '#94a3b8', letterSpacing: '2px' }}>PROPERTY MANAGEMENT</div>
-          </div>
+        <Form.Item
+          name="password"
+          label="Mật khẩu"
+          rules={[{ required: true, message: 'Vui lòng nhập Mật khẩu!' }]}
+        >
+          <Input.Password prefix={<Lock size={18} color="#64748B" aria-hidden="true" />} placeholder="••••••••" autoComplete="current-password" />
+        </Form.Item>
+
+        <div className="auth-links">
+          <button type="button" className="link-btn danger" onClick={() => setAppealModalVisible(true)}>
+            Tài khoản bị khóa?
+          </button>
+          {/* ponytail: chưa có API quên mật khẩu, thêm khi backend hỗ trợ */}
+          <button type="button" className="link-btn" onClick={() => message.info('Vui lòng liên hệ quản trị viên để đặt lại mật khẩu.')}>
+            Quên mật khẩu?
+          </button>
         </div>
 
-        <div style={{ zIndex: 2, margin: '80px 0' }}>
-          <h1 style={{ fontSize: '42px', fontWeight: '800', lineHeight: '1.2', marginBottom: '24px', background: 'linear-gradient(to right, #ffffff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Hệ thống Quản lý <br />Nhà trọ & Căn hộ Dịch vụ <br />Thông minh Tích hợp AI
-          </h1>
-          <p style={{ color: '#94a3b8', fontSize: '16px', lineHeight: '1.6', maxWidth: '480px' }}>
-            Giải pháp số hóa toàn diện quy trình vận hành: Quản lý tòa nhà, Tự động hóa hóa đơn qua mã VietQR và gửi thông báo tức thời tới Telegram người thuê trọ chỉ trong vài giây.
-          </p>
+        <Button type="primary" htmlType="submit" loading={loading} block style={{ height: 48 }} icon={<ArrowRight size={16} />} iconPosition="end">
+          Đăng nhập
+        </Button>
+
+        <div className="auth-switch">
+          Chưa có tài khoản?{' '}
+          <button type="button" className="link-btn" style={{ fontSize: 14 }} onClick={() => navigate('/register')}>
+            Đăng ký chủ nhà
+          </button>
         </div>
-
-        <div style={{ zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '24px' }}>
-          <span style={{ color: '#64748b', fontSize: '12px' }}>© 2026 Executive Lens. All rights reserved.</span>
-          <div style={{ display: 'flex', gap: '15px', fontSize: '12px', color: '#94a3b8' }}>
-            <span style={{ cursor: 'pointer' }}>Điều khoản</span>
-            <span style={{ cursor: 'pointer' }}>Bảo mật</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Cột phải: Form Đăng nhập */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '40px',
-        background: '#ffffff'
-      }}>
-        <div style={{ width: '100%', maxWidth: '400px' }}>
-          <div style={{ marginBottom: '32px' }}>
-            <h2 style={{ fontSize: '28px', fontWeight: '800', color: '#0f172a', margin: '0 0 8px 0' }}>Đăng nhập</h2>
-            <p style={{ color: '#64748b', margin: 0, fontSize: '14px' }}>Vui lòng đăng nhập tài khoản của bạn để tiếp tục.</p>
-          </div>
-
-          <Card bordered={false} bodyStyle={{ padding: 0 }} style={{ background: 'transparent' }}>
-            <Form
-              name="login_form"
-              layout="vertical"
-              onFinish={onFinish}
-              requiredMark={false}
-              size="large"
-            >
-              <Form.Item
-                name="identity"
-                rules={[
-                  { required: true, message: 'Vui lòng nhập Email hoặc Số điện thoại!' },
-                ]}
-              >
-                <Input 
-                  prefix={<Mail size={18} style={{ color: '#94a3b8', marginRight: '8px' }} />} 
-                  placeholder="Email hoặc Số điện thoại" 
-                  style={{
-                    borderRadius: '8px',
-                    borderColor: '#cbd5e1',
-                    padding: '10px 14px'
-                  }}
-                />
-              </Form.Item>
-
-              <Form.Item
-                name="password"
-                rules={[{ required: true, message: 'Vui lòng nhập Mật khẩu!' }]}
-              >
-                <Input.Password
-                  prefix={<Lock size={18} style={{ color: '#94a3b8', marginRight: '8px' }} />}
-                  placeholder="Mật khẩu"
-                  style={{
-                    borderRadius: '8px',
-                    borderColor: '#cbd5e1',
-                    padding: '10px 14px'
-                  }}
-                />
-              </Form.Item>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
-                <span 
-                  onClick={() => setAppealModalVisible(true)} 
-                  style={{ color: '#f5222d', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}
-                >
-                  Tài khoản bị khóa?
-                </span>
-                <span style={{ color: '#6366f1', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>
-                  Quên mật khẩu?
-                </span>
-              </div>
-
-              <Form.Item style={{ marginBottom: 0 }}>
-                <Button 
-                  type="primary" 
-                  htmlType="submit" 
-                  loading={loading}
-                  block
-                  style={{
-                    height: '48px',
-                    borderRadius: '8px',
-                    background: '#0f172a',
-                    border: 'none',
-                    fontWeight: '600',
-                    fontSize: '15px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)'
-                  }}
-                  className="login-btn"
-                >
-                  Bắt đầu làm việc <ArrowRight size={16} />
-                </Button>
-              </Form.Item>
-
-              <div style={{ textAlign: 'center', color: '#64748b', fontSize: '14px', marginTop: '16px' }}>
-                Chưa có tài khoản?{' '}
-                <span 
-                  onClick={() => navigate('/register')} 
-                  style={{ color: '#6366f1', fontWeight: '600', cursor: 'pointer' }}
-                >
-                  Đăng ký chủ nhà
-                </span>
-              </div>
-            </Form>
-          </Card>
-        </div>
-      </div>
+      </Form>
 
       {/* Modal hướng dẫn người thuê kết nối Telegram */}
       <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a', fontSize: '18px', fontWeight: '700' }}>
-            <Send size={20} color="#0088cc" /> Liên kết Telegram nhận hóa đơn
-          </div>
-        }
+        title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Send size={20} color="#0088cc" /> Liên kết Telegram nhận hóa đơn</span>}
         open={tenantModalVisible}
         onCancel={() => setTenantModalVisible(false)}
         footer={[
-          <Button key="close" onClick={() => setTenantModalVisible(false)} style={{ borderRadius: '6px' }}>
-            Để sau
-          </Button>,
-          <Button 
-            key="connect" 
-            type="primary" 
-            style={{ background: '#0088cc', border: 'none', borderRadius: '6px' }}
+          <Button key="close" onClick={() => setTenantModalVisible(false)}>Để sau</Button>,
+          <Button
+            key="connect"
+            type="primary"
             onClick={() => {
-              window.open(telegramLink, '_blank');
+              window.open(telegramLink, '_blank', 'noopener');
               setTenantModalVisible(false);
             }}
           >
@@ -275,31 +150,22 @@ const Login = () => {
         width={420}
         centered
       >
-        <div style={{ fontSize: '14px', color: '#475569', lineHeight: '1.6', padding: '10px 0' }}>
-          Chào bạn! Để nhận thông báo hóa đơn tiền phòng hàng tháng kèm mã QR chuyển khoản trực tiếp qua Telegram, vui lòng nhấn kết nối với Bot Telegram của chúng tôi.
-        </div>
+        <p style={{ color: '#475569', lineHeight: 1.6 }}>
+          Để nhận thông báo hóa đơn tiền phòng hàng tháng kèm mã QR chuyển khoản qua Telegram, vui lòng kết nối với Bot Telegram của chúng tôi.
+        </p>
       </Modal>
 
       {/* Modal gửi khiếu nại tài khoản bị khóa */}
       <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a', fontSize: '18px', fontWeight: '700' }}>
-            Yêu cầu khiếu nại tài khoản bị khóa
-          </div>
-        }
+        title="Khiếu nại tài khoản bị khóa"
         open={appealModalVisible}
         onCancel={() => setAppealModalVisible(false)}
         footer={null}
-        width={450}
+        width={460}
         centered
+        destroyOnHidden
       >
-        <Form
-          layout="vertical"
-          onFinish={onAppealFinish}
-          requiredMark={false}
-          size="middle"
-          style={{ marginTop: '16px' }}
-        >
+        <Form layout="vertical" onFinish={onAppealFinish} requiredMark={false} style={{ marginTop: 16 }}>
           <Form.Item
             name="email"
             label="Email tài khoản bị khóa"
@@ -308,7 +174,7 @@ const Login = () => {
               { type: 'email', message: 'Email không đúng định dạng!' }
             ]}
           >
-            <Input placeholder="nhapemailcuaban@gmail.com" />
+            <Input placeholder="ban@example.com" autoComplete="email" />
           </Form.Item>
 
           <Form.Item
@@ -322,37 +188,19 @@ const Login = () => {
 
           <Form.Item
             name="message"
-            label="Lý do & Nội dung khiếu nại"
+            label="Lý do & nội dung khiếu nại"
             rules={[{ required: true, message: 'Vui lòng nhập lý do khiếu nại!' }]}
           >
-            <Input.TextArea rows={4} placeholder="Vui lòng cung cấp lý do chi tiết hoặc thông tin để ban quản trị đối soát mở khóa tài khoản..." />
+            <Input.TextArea rows={4} placeholder="Cung cấp lý do chi tiết để ban quản trị đối soát mở khóa tài khoản..." />
           </Form.Item>
 
-          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-            <Button onClick={() => setAppealModalVisible(false)} style={{ marginRight: '8px', borderRadius: '6px' }}>
-              Hủy
-            </Button>
-            <Button type="primary" htmlType="submit" loading={appealLoading} style={{ background: '#f5222d', borderColor: '#f5222d', borderRadius: '6px' }}>
-              Gửi Khiếu Nại
-            </Button>
-          </Form.Item>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button onClick={() => setAppealModalVisible(false)}>Hủy</Button>
+            <Button type="primary" danger htmlType="submit" loading={appealLoading}>Gửi khiếu nại</Button>
+          </div>
         </Form>
       </Modal>
-
-      {/* CSS phụ trợ cho Responsive */}
-      <style>{`
-        @media (max-width: 992px) {
-          .login-banner {
-            display: none !important;
-          }
-        }
-        .login-btn:hover {
-          background: #1e293b !important;
-          transform: translateY(-1px);
-          transition: all 0.2s ease;
-        }
-      `}</style>
-    </div>
+    </AuthLayout>
   );
 };
 

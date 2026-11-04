@@ -1,14 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Table, Tag, Avatar, Space, Card, Button, Modal, Form, Input, message, Popconfirm, Spin } from 'antd';
-import { UserPlus, Trash2, Calendar, Phone } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Table, Tag, Avatar, Space, Card, Button, Modal, Form, Input, Select, message, Popconfirm, Tooltip } from 'antd';
+import { UserPlus, Trash2, Users, Edit2, Search } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
+import PageHeader from '../../components/admin/PageHeader';
 
 const TenantManager = () => {
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingTenant, setEditingTenant] = useState(null);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [filterType, setFilterType] = useState('all');
+
   const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -25,6 +32,13 @@ const TenantManager = () => {
 
   useEffect(() => {
     fetchTenants();
+  }, []);
+
+  // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
+  useEffect(() => {
+    const onChanged = () => { fetchTenants(); };
+    window.addEventListener('app:data-changed', onChanged);
+    return () => window.removeEventListener('app:data-changed', onChanged);
   }, []);
 
   const handleCreateTenant = async (values) => {
@@ -48,6 +62,37 @@ const TenantManager = () => {
     }
   };
 
+  const handleOpenEditModal = (record) => {
+    setEditingTenant(record);
+    editForm.setFieldsValue({
+      name: record.name || '',
+      phone: record.phone || '',
+      email: record.email || ''
+    });
+    setEditModalVisible(true);
+  };
+
+  const handleUpdateTenant = async (values) => {
+    if (!editingTenant) return;
+    setSubmitLoading(true);
+    try {
+      await axiosInstance.put(`/manage/tenants/${editingTenant.id}`, {
+        name: values.name,
+        phone: values.phone,
+        email: values.email || undefined
+      });
+      message.success('Đã cập nhật thông tin khách thuê thành công!');
+      setEditModalVisible(false);
+      setEditingTenant(null);
+      fetchTenants();
+    } catch (err) {
+      console.error('Error updating tenant:', err);
+      message.error(err.response?.data?.message || 'Không thể cập nhật thông tin khách thuê.');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
   const handleDeleteTenant = async (id) => {
     try {
       const response = await axiosInstance.delete(`/manage/tenants/${id}`);
@@ -60,65 +105,138 @@ const TenantManager = () => {
     }
   };
 
+  const handleUnlockTenant = async (record) => {
+    try {
+      const response = await axiosInstance.put(`/manage/tenants/${record.id}`, { status: 'active' });
+      message.success(response?.message || 'Đã mở khóa tài khoản khách thuê!');
+      fetchTenants();
+    } catch (err) {
+      console.error('Error unlocking tenant:', err);
+      message.error(err.response?.data?.message || 'Không thể mở khóa khách thuê.');
+    }
+  };
+
+  const filteredTenants = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    return tenants.filter((t) => {
+      if (q) {
+        const matchName = (t.name || '').toLowerCase().includes(q);
+        const matchPhone = (t.phone || '').toLowerCase().includes(q);
+        if (!matchName && !matchPhone) return false;
+      }
+      if (filterType === 'locked') {
+        return t.status === 'locked';
+      }
+      if (filterType === 'unlinked_telegram') {
+        return !t.telegramChatId;
+      }
+      if (filterType === 'unregistered_residence') {
+        const occ = (t.rentals || []).flatMap((c) => c.occupants || []);
+        return occ.length > 0 && occ.some((o) => o.residenceStatus !== 'registered');
+      }
+      return true;
+    });
+  }, [tenants, searchText, filterType]);
+
   const columns = [
-    { 
-      title: 'THÔNG TIN KHÁCH THUÊ', 
+    {
+      title: 'Khách thuê',
       key: 'tenantDetails',
       render: (r) => (
         <Space>
-          <Avatar 
-            src={`https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(r.name)}`} 
-            style={{ background: '#f1f5f9' }}
-          />
+          <Avatar style={{ background: '#CCFBF1', color: '#0F766E', fontWeight: 700 }}>
+            {(r.name || '?').trim().charAt(0).toUpperCase()}
+          </Avatar>
           <div>
-            <b style={{ color: '#1a3353' }}>{r.name}</b>
-            <br />
-            <small style={{ color: '#8c8c8c' }}>{r.email || 'Chưa cập nhật email'}</small>
+            <div style={{ fontWeight: 600, color: '#0F172A', lineHeight: 1.3 }}>
+              {r.name}{' '}
+              {r.status === 'locked' && (
+                <Tooltip title={r.lockReason || 'Tài khoản đã bị khóa'}>
+                  <Tag color="red">Đã khóa</Tag>
+                </Tooltip>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: '#64748B' }}>{r.email || 'Chưa cập nhật email'}</div>
           </div>
         </Space>
       )
     },
-    { 
-      title: 'SỐ ĐIỆN THOẠI', 
-      dataIndex: 'phone', 
+    {
+      title: 'Số điện thoại',
+      dataIndex: 'phone',
       key: 'phone',
-      render: (phone) => <b>{phone}</b>
+      render: (phone) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{phone}</span>
     },
-    { 
-      title: 'LIÊN KẾT TELEGRAM', 
-      dataIndex: 'telegramChatId', 
-      key: 'telegramChatId',
-      render: (chatId) => {
-        return chatId ? (
-          <Tag color="success" style={{ fontWeight: 'bold' }}>Đã liên kết ({chatId})</Tag>
-        ) : (
-          <Tag color="warning" style={{ fontWeight: 'bold' }}>Chưa liên kết</Tag>
+    {
+      title: 'Phòng đang thuê',
+      key: 'rentedRooms',
+      render: (_, r) => {
+        const roomNumbers = (r.rentals || [])
+          .map((c) => c.room?.roomNumber)
+          .filter(Boolean);
+        if (roomNumbers.length === 0) {
+          return <span style={{ color: '#94A3B8' }}>Chưa thuê phòng</span>;
+        }
+        return (
+          <Space size={4} wrap>
+            {roomNumbers.map((rn) => (
+              <Tag key={rn} color="blue">Phòng {rn}</Tag>
+            ))}
+          </Space>
         );
       }
     },
-    { 
-      title: 'NGÀY TẠO TÀI KHOẢN', 
-      dataIndex: 'createdAt', 
-      key: 'createdAt',
-      render: (date) => (
-        <span style={{ fontSize: '13px', color: '#64748b' }}>
-          {new Date(date).toLocaleDateString('vi-VN')}
-        </span>
+    {
+      title: 'Liên kết Telegram',
+      dataIndex: 'telegramChatId',
+      key: 'telegramChatId',
+      render: (chatId) => (
+        <Tag color={chatId ? 'success' : 'warning'}>{chatId ? `Đã liên kết (${chatId})` : 'Chưa liên kết'}</Tag>
       )
     },
     {
-      title: 'HÀNH ĐỘNG',
+      // Số người đã khai báo tạm trú / tổng số người ở trên các HĐ active (C6)
+      title: 'Tạm trú',
+      key: 'residence',
+      render: (_, r) => {
+        const occ = (r.rentals || []).flatMap((c) => c.occupants || []);
+        if (occ.length === 0) return <span style={{ color: '#94A3B8' }}>—</span>;
+        const reg = occ.filter((o) => o.residenceStatus === 'registered').length;
+        return <Tag color={reg === occ.length ? 'success' : 'warning'}>{reg}/{occ.length} đã khai báo</Tag>;
+      }
+    },
+    {
+      title: 'Ngày tạo tài khoản',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (date) => <span style={{ fontSize: 13, color: '#475569' }}>{new Date(date).toLocaleDateString('vi-VN')}</span>
+    },
+    {
+      title: '',
       key: 'action',
+      width: 170,
       render: (_, record) => (
-        <Space size="middle">
+        <Space size={4}>
+          <Tooltip title="Sửa thông tin khách thuê">
+            <Button
+              type="text"
+              aria-label={`Sửa thông tin khách thuê ${record.name}`}
+              icon={<Edit2 size={15} color="#475569" />}
+              onClick={() => handleOpenEditModal(record)}
+            />
+          </Tooltip>
+          {record.status === 'locked' && (
+            <Button size="small" aria-label={`Mở khóa khách thuê ${record.name}`} onClick={() => handleUnlockTenant(record)}>Mở khóa</Button>
+          )}
           <Popconfirm
             title="Xóa tài khoản khách thuê"
-            description="Bạn có chắc chắn muốn xóa khách thuê này không? Hợp đồng của khách thuê phải được thanh lý trước."
+            description="Hợp đồng phải được thanh lý trước. Khách có lịch sử sẽ bị khóa thay vì xóa."
             okText="Xóa"
             cancelText="Hủy"
+            okButtonProps={{ danger: true }}
             onConfirm={() => handleDeleteTenant(record.id)}
           >
-            <Button type="text" danger icon={<Trash2 size={16} />} />
+            <Button type="text" danger aria-label={`Xóa khách thuê ${record.name}`} icon={<Trash2 size={16} />} />
           </Popconfirm>
         </Space>
       )
@@ -127,98 +245,136 @@ const TenantManager = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <div style={{ color: '#8c8c8c', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>Danh mục  •  Khách thuê</div>
-          <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#1a3353', margin: 0 }}>Quản lý Khách thuê</h1>
-        </div>
-        <Button 
-          type="primary" 
-          icon={<UserPlus size={16} />} 
-          style={{ background: '#1a3353', border: 'none', height: '40px', borderRadius: '8px', fontWeight: 'bold' }}
-          onClick={() => setModalVisible(true)}
-        >
-          Tạo tài khoản khách thuê
-        </Button>
-      </div>
+      <PageHeader
+        title="Quản lý khách thuê"
+        description="Tài khoản đăng nhập và liên kết Telegram của khách thuê trong khu trọ."
+        onRefresh={fetchTenants}
+        refreshLoading={loading}
+        extra={
+          <Button type="primary" icon={<UserPlus size={16} />} onClick={() => setModalVisible(true)}>
+            Tạo tài khoản
+          </Button>
+        }
+      />
 
-      <Card 
-        bordered={false} 
-        style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}
-        title={<Space><Phone size={18} color="#1a3353" /> Danh sách khách thuê trọ</Space>}
+      <Card
+        title={<span className="card-title"><Users size={18} color="#0F766E" aria-hidden="true" /> Danh sách khách thuê</span>}
+        extra={
+          <Space wrap>
+            <Input
+              allowClear
+              prefix={<Search size={15} color="#94A3B8" />}
+              placeholder="Tìm theo tên hoặc SĐT..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{ width: 220 }}
+            />
+            <Select
+              value={filterType}
+              onChange={setFilterType}
+              style={{ width: 210 }}
+              options={[
+                { value: 'all', label: 'Tất cả khách thuê' },
+                { value: 'locked', label: 'Đã khóa' },
+                { value: 'unregistered_residence', label: 'Chưa đăng ký tạm trú' },
+                { value: 'unlinked_telegram', label: 'Chưa liên kết Telegram' }
+              ]}
+            />
+          </Space>
+        }
+        styles={{ body: { padding: 0 } }}
       >
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0' }}>
-            <Spin size="large" tip="Đang tải danh sách khách thuê..." />
-          </div>
-        ) : (
-          <Table 
-            columns={columns} 
-            dataSource={tenants} 
-            rowKey="id" 
-            pagination={{ pageSize: 8 }}
-            scroll={{ x: true }}
-          />
-        )}
+        <Table
+          columns={columns}
+          dataSource={filteredTenants}
+          loading={loading}
+          rowKey="id"
+          pagination={{ pageSize: 8, showSizeChanger: false, showTotal: (total) => `Tổng ${total} khách thuê` }}
+          scroll={{ x: 820 }}
+          locale={{ emptyText: 'Chưa có khách thuê nào' }}
+        />
       </Card>
 
       {/* MODAL THÊM KHÁCH THUÊ */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><UserPlus size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Tạo tài khoản khách thuê mới</span>}
+        title="Tạo tài khoản khách thuê mới"
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setModalVisible(false)} style={{ borderRadius: '8px' }}>
-            Hủy
-          </Button>,
-          <Button 
-            key="submit" 
-            type="primary" 
-            loading={submitLoading} 
-            style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }}
-            onClick={() => form.submit()}
-          >
-            Tạo tài khoản
-          </Button>
-        ]}
-        width={400}
+        onOk={() => form.submit()}
+        okText="Tạo tài khoản"
+        cancelText="Hủy"
+        confirmLoading={submitLoading}
+        width={440}
         centered
+        destroyOnHidden
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreateTenant}
-          requiredMark={false}
-          style={{ marginTop: '16px' }}
-        >
-          <Form.Item
-            name="name"
-            label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Họ và tên khách thuê</span>}
-            rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}
-          >
-            <Input placeholder="Ví dụ: Nguyễn Văn A, Trần Thị B" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+        <Form form={form} layout="vertical" onFinish={handleCreateTenant} requiredMark={false} style={{ marginTop: 16 }}>
+          <Form.Item name="name" label="Họ và tên khách thuê" rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}>
+            <Input placeholder="Ví dụ: Nguyễn Văn A" autoComplete="name" />
           </Form.Item>
 
           <Form.Item
             name="phone"
-            label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số điện thoại</span>}
+            label="Số điện thoại"
             rules={[
               { required: true, message: 'Vui lòng nhập số điện thoại!' },
               { pattern: /^[0-9]{10}$/, message: 'Số điện thoại không hợp lệ (yêu cầu 10 chữ số)!' }
             ]}
           >
-            <Input placeholder="Ví dụ: 0987654321" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+            <Input placeholder="Ví dụ: 0987654321" inputMode="numeric" autoComplete="tel" />
           </Form.Item>
 
           <Form.Item
             name="password"
-            label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Mật khẩu đăng nhập mặc định</span>}
+            label="Mật khẩu đăng nhập mặc định"
+            extra="Tối thiểu 6 ký tự"
             rules={[
               { required: true, message: 'Vui lòng nhập mật khẩu mặc định!' },
               { min: 6, message: 'Mật khẩu phải dài tối thiểu 6 ký tự!' }
             ]}
           >
-            <Input.Password placeholder="Nhập mật khẩu mặc định" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+            <Input.Password placeholder="••••••••" autoComplete="new-password" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* MODAL SỬA THÔNG TIN KHÁCH THUÊ (T3.3) */}
+      <Modal
+        title="Sửa thông tin khách thuê"
+        open={editModalVisible}
+        onCancel={() => { setEditModalVisible(false); setEditingTenant(null); }}
+        onOk={() => editForm.submit()}
+        okText="Lưu thay đổi"
+        cancelText="Hủy"
+        confirmLoading={submitLoading}
+        width={440}
+        centered
+        destroyOnHidden
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdateTenant} requiredMark={false} style={{ marginTop: 16 }}>
+          <Form.Item name="name" label="Họ và tên khách thuê" rules={[{ required: true, message: 'Vui lòng nhập họ tên!' }]}>
+            <Input placeholder="Ví dụ: Nguyễn Văn A" autoComplete="name" />
+          </Form.Item>
+
+          <Form.Item
+            name="phone"
+            label="Số điện thoại"
+            rules={[
+              { required: true, message: 'Vui lòng nhập số điện thoại!' },
+              { pattern: /^[0-9]{10}$/, message: 'Số điện thoại không hợp lệ (yêu cầu 10 chữ số)!' }
+            ]}
+          >
+            <Input placeholder="Ví dụ: 0987654321" inputMode="numeric" autoComplete="tel" />
+          </Form.Item>
+
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[
+              { type: 'email', message: 'Email không đúng định dạng!' }
+            ]}
+          >
+            <Input placeholder="Ví dụ: khachthue@example.com" autoComplete="email" />
           </Form.Item>
         </Form>
       </Modal>

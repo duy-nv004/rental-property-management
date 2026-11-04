@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Card, InputNumber, Button, Form, Radio, message, Spin, Tag } from 'antd';
+import { Row, Col, Card, InputNumber, Button, Form, Radio, message, Spin, Tag, Grid } from 'antd';
 import { ShieldCheck, Cpu, Save } from 'lucide-react';
 import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
+import PageHeader from '../../components/admin/PageHeader';
+
+const TIERS = {
+  free: { tier: 'Tier 01', color: '#475569', title: 'Gói Miễn phí' },
+  basic: { tier: 'Tier 02', color: '#0F766E', title: 'Gói Cơ bản (Basic)' },
+  pro: { tier: 'Tier 03', color: '#0369A1', title: 'Gói Chuyên nghiệp (Pro)' },
+};
 
 const PackageCard = ({ plan, onSave }) => {
   const [form] = Form.useForm();
   const [aiLimitType, setAiLimitType] = useState(plan.maxAICallsPerMonth === -1 ? 'unlimited' : 'limited');
   const [submitLoading, setSubmitLoading] = useState(false);
+  const isPhone = !Grid.useBreakpoint().md;
 
   useEffect(() => {
     form.setFieldsValue({
-      price: plan.price,
-      annualPrice: plan.annualPrice,
+      price: Number(plan.price),
+      annualPrice: Number(plan.annualPrice),
       maxBuildings: plan.maxBuildings,
       maxRoomsPerBuilding: plan.maxRoomsPerBuilding,
       maxAICallsPerMonth: plan.maxAICallsPerMonth === -1 ? 30 : plan.maxAICallsPerMonth
@@ -41,125 +49,83 @@ const PackageCard = ({ plan, onSave }) => {
     }
   };
 
-  const getTierDetails = (name) => {
-    switch (name) {
-      case 'free':
-        return { tier: 'TIER 01', color: '#64748b', title: 'Gói Miễn Phí' };
-      case 'basic':
-        return { tier: 'TIER 02', color: '#10b981', title: 'Gói Cơ Bản (Basic)' };
-      case 'pro':
-        return { tier: 'TIER 03', color: '#6366f1', title: 'Gói Chuyên Nghiệp (Pro)' };
-      default:
-        return { tier: 'TIER XX', color: '#64748b', title: name.toUpperCase() };
-    }
-  };
-
-  const details = getTierDetails(plan.name);
+  const details = TIERS[plan.name] || { tier: 'Tier', color: '#475569', title: plan.name.toUpperCase() };
+  const featured = plan.name === 'basic';
+  const isFree = plan.name === 'free';
+  const numberInput = (min) => <InputNumber min={min} style={{ width: '100%' }} />;
+  // Giá VND: bước 1000đ, có dấu phân cách hàng nghìn. Gói Free luôn 0đ nên khóa ô giá.
+  const priceInput = (
+    <InputNumber
+      min={0}
+      step={1000}
+      precision={0}
+      disabled={isFree}
+      formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+      parser={(v) => (v || '').replace(/\./g, '')}
+      style={{ width: '100%' }}
+    />
+  );
 
   return (
-    <Card 
-      style={{ borderRadius: '16px', border: plan.name === 'basic' ? '2px solid #10b981' : '1px solid #e2e8f0', position: 'relative', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}
-      bodyStyle={{ padding: '24px' }}
-    >
-      {plan.name === 'basic' && (
-        <Tag color="#10b981" style={{ position: 'absolute', top: -12, right: 20, borderRadius: '4px', fontWeight: 'bold' }}>
-          PHỔ BIẾN
-        </Tag>
+    <Card style={{ height: '100%', position: 'relative', border: featured ? '2px solid #0F766E' : undefined }}>
+      {featured && (
+        <Tag color="#0F766E" style={{ position: 'absolute', top: -12, right: 20, fontWeight: 600 }}>Phổ biến</Tag>
       )}
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: '10px', color: details.color, fontWeight: 'bold', letterSpacing: '1px' }}>{details.tier}</div>
-          <h2 style={{ margin: 0, color: '#1a3353', fontWeight: '800' }}>{details.title}</h2>
+          <div style={{ fontSize: 12, color: details.color, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8 }}>{details.tier}</div>
+          <h2 style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 700, color: '#0F172A' }}>{details.title}</h2>
         </div>
-        <ShieldCheck size={24} color={details.color} />
+        <div className="stat-icon" style={{ background: details.color + '14', color: details.color }} aria-hidden="true">
+          <ShieldCheck size={20} />
+        </div>
       </div>
 
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSubmit}
-        requiredMark={false}
-      >
+      <Form form={form} name={`plan-${plan.id}`} layout="vertical" onFinish={handleSubmit} requiredMark={false}>
         <Row gutter={12}>
-          <Col span={12}>
-            <Form.Item
-              name="price"
-              label={<span style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>GIÁ THÁNG (USD)</span>}
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
+          <Col xs={24} sm={12}>
+            <Form.Item name="price" label="Giá tháng (VND)" rules={[{ required: true, message: 'Bắt buộc' }]}>{priceInput}</Form.Item>
           </Col>
-          <Col span={12}>
-            <Form.Item
-              name="annualPrice"
-              label={<span style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>GIÁ NĂM (USD)</span>}
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
+          <Col xs={24} sm={12}>
+            <Form.Item name="annualPrice" label="Giá năm (VND)" rules={[{ required: true, message: 'Bắt buộc' }]}>{priceInput}</Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="maxBuildings" label="Tối đa tòa nhà" rules={[{ required: true, message: 'Bắt buộc' }]}>{numberInput(1)}</Form.Item>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Form.Item name="maxRoomsPerBuilding" label="Tối đa phòng / tòa" rules={[{ required: true, message: 'Bắt buộc' }]}>{numberInput(1)}</Form.Item>
           </Col>
         </Row>
 
-        <Row gutter={12}>
-          <Col span={12}>
-            <Form.Item
-              name="maxBuildings"
-              label={<span style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>MAX TÒA NHÀ</span>}
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={1} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item
-              name="maxRoomsPerBuilding"
-              label={<span style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>MAX PHÒNG / TÒA</span>}
-              rules={[{ required: true }]}
-            >
-              <InputNumber min={1} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        {/* CẤU HÌNH AI LIMIT */}
-        <div style={{ marginBottom: '24px', background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
-          <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Cpu size={14} color="#6366f1" />
-            GIỚI HẠN AI QUÉT CHỈ SỐ
+        <div style={{ marginBottom: 20, background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #EEF2F6' }}>
+          <div id={`ai-limit-${plan.id}`} style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Cpu size={16} color="#0F766E" aria-hidden="true" /> Giới hạn AI quét chỉ số
           </div>
-          
-          <Radio.Group 
-            value={aiLimitType} 
+          <Radio.Group
+            aria-labelledby={`ai-limit-${plan.id}`}
+            value={aiLimitType}
             onChange={(e) => setAiLimitType(e.target.value)}
-            style={{ marginBottom: '12px' }}
+            style={{ marginBottom: aiLimitType === 'limited' ? 12 : 0 }}
           >
             <Radio value="unlimited">Không giới hạn</Radio>
-            <Radio value="limited">Giới hạn quét</Radio>
+            <Radio value="limited">Giới hạn</Radio>
           </Radio.Group>
 
           {aiLimitType === 'limited' && (
             <Form.Item
               name="maxAICallsPerMonth"
-              label={<span style={{ fontSize: '10px', fontWeight: 'bold', color: '#64748b' }}>SỐ LƯỢT QUÉT / THÁNG</span>}
+              label="Số lượt quét / tháng"
               rules={[{ required: true, message: 'Nhập số lượt quét!' }]}
               style={{ marginBottom: 0 }}
             >
-              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
+              {numberInput(0)}
             </Form.Item>
           )}
         </div>
 
-        <Button 
-          type="primary" 
-          htmlType="submit"
-          loading={submitLoading}
-          icon={<Save size={16} />}
-          block 
-          style={{ height: '40px', borderRadius: '8px', background: plan.name === 'basic' ? '#10b981' : '#1a3353', border: 'none', fontWeight: 'bold' }}
-        >
-          Lưu Thay Đổi
+        <Button type={featured ? 'primary' : 'default'} htmlType="submit" loading={submitLoading} icon={<Save size={16} />} block size={isPhone ? 'large' : 'middle'}>
+          Lưu thay đổi
         </Button>
       </Form>
     </Card>
@@ -206,20 +172,19 @@ const PackageSettings = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '32px' }}>
-        <div style={{ color: '#8c8c8c', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>Hệ Thống  •  Gói Cước</div>
-        <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#1a3353', margin: 0 }}>Cấu hình các Gói dịch vụ SaaS</h1>
-        <p style={{ color: '#8c8c8c', margin: '4px 0 0 0' }}>Điều chỉnh giá cả và giới hạn vận hành (tòa nhà, số phòng, số lượt AI) của từng gói cước.</p>
-      </div>
+      <PageHeader
+        title="Cấu hình gói dịch vụ"
+        description="Điều chỉnh giá và giới hạn vận hành (tòa nhà, số phòng, lượt AI) của từng gói cước."
+      />
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40vh' }}>
-          <Spin size="large" tip="Đang tải dữ liệu cấu hình các gói..." />
+          <Spin size="large" />
         </div>
       ) : (
-        <Row gutter={[24, 24]}>
+        <Row gutter={[20, 24]}>
           {plans.map(plan => (
-            <Col xs={24} md={8} key={plan.id}>
+            <Col xs={24} md={12} xl={8} key={plan.id}>
               <PackageCard plan={plan} onSave={handleSavePlan} />
             </Col>
           ))}

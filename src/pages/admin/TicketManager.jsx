@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Row, Col, Card, Table, Button, Space, Popconfirm, Spin, message } from 'antd';
+import { Row, Col, Card, Table, Button, Space, Popconfirm, Modal, Input, message, Grid } from 'antd';
 import { Clock, CheckCircle2, XCircle, Inbox } from 'lucide-react';
 import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
@@ -8,21 +8,12 @@ import PageHeader from '../../components/admin/PageHeader';
 // ─── Sub-components ──────────────────────────────────────────────────────────────
 
 const TicketStatCard = ({ icon, label, value, color, bg }) => (
-  <Card
-    bordered={false}
-    style={{ borderRadius: '14px', boxShadow: '0 2px 12px rgba(0,0,0,0.04)', border: `1px solid ${bg}` }}
-    bodyStyle={{ padding: '16px 20px' }}
-  >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div style={{
-        width: 40, height: 40, borderRadius: '10px', background: bg,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        {icon}
-      </div>
+  <Card className="stat-card">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="stat-icon" style={{ background: bg, color }} aria-hidden="true">{icon}</div>
       <div>
-        <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.5px' }}>{label}</div>
-        <div style={{ fontSize: '20px', fontWeight: '900', color }}>{value}</div>
+        <div className="stat-label">{label}</div>
+        <div className="stat-value" style={{ fontSize: 22, marginTop: 2 }}>{value}</div>
       </div>
     </div>
   </Card>
@@ -48,9 +39,10 @@ const StatusBadge = ({ status }) => {
     <span style={{
       display: 'inline-block',
       padding: '3px 10px',
-      borderRadius: '20px',
-      fontSize: '11px',
-      fontWeight: '700',
+      borderRadius: 999,
+      fontSize: 12,
+      fontWeight: 600,
+      whiteSpace: 'nowrap',
       color: cfg.color,
       background: cfg.bg,
       border: `1px solid ${cfg.border}`,
@@ -70,6 +62,10 @@ const TicketManager = () => {
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState([]);
   const [actionLoading, setActionLoading] = useState(null);
+  // T2.17: từ chối bắt buộc nhập lý do (gửi email cho chủ nhà)
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const isPhone = !Grid.useBreakpoint().md; // phone: vùng chạm 44px
 
   const fetchTickets = async () => {
     setLoading(true);
@@ -86,19 +82,34 @@ const TicketManager = () => {
 
   useEffect(() => { fetchTickets(); }, []);
 
-  const handleResolveTicket = async (ticketId, status) => {
+  const handleResolveTicket = async (ticketId, status, reason) => {
     setActionLoading(ticketId);
     try {
-      const response = await axiosInstance.put(`/admin/tickets/${ticketId}/resolve`, { status });
+      const body = status === 'rejected' ? { status, reason } : { status };
+      const response = await axiosInstance.put(`/admin/tickets/${ticketId}/resolve`, body);
       const actionText = status === 'resolved' ? 'phê duyệt và mở khóa' : 'từ chối';
       message.success(response.message || `Đã ${actionText} khiếu nại thành công!`);
       fetchTickets();
+      return true;
     } catch (err) {
       console.error(err);
       message.error(err.response?.data?.message || 'Lỗi xử lý khiếu nại!');
+      return false;
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const openReject = (ticketId) => {
+    setRejectReason('');
+    setRejectTarget(ticketId);
+  };
+
+  const trimmedReason = rejectReason.trim();
+  const submitReject = async () => {
+    if (trimmedReason.length < 5) return;
+    const ok = await handleResolveTicket(rejectTarget, 'rejected', trimmedReason);
+    if (ok) setRejectTarget(null);
   };
 
   // Computed stats
@@ -185,47 +196,23 @@ const TicketManager = () => {
                 type="primary"
                 size="small"
                 loading={actionLoading === record.id}
-                icon={<CheckCircle2 size={13} />}
-                style={{
-                  background: '#22c55e',
-                  borderColor: '#22c55e',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
+                icon={<CheckCircle2 size={14} />}
+                style={{ height: isPhone ? 44 : 32 }}
               >
                 Duyệt
               </Button>
             </Popconfirm>
 
-            <Popconfirm
-              title="Từ chối khiếu nại?"
-              description="Tài khoản chủ nhà vẫn giữ nguyên trạng thái BỊ KHÓA."
-              onConfirm={() => handleResolveTicket(record.id, 'rejected')}
-              okText="Từ chối"
-              cancelText="Hủy"
-              okButtonProps={{ danger: true }}
+            <Button
+              size="small"
+              loading={actionLoading === record.id}
+              icon={<XCircle size={14} />}
+              danger
+              style={{ height: isPhone ? 44 : 32 }}
+              onClick={() => openReject(record.id)}
             >
-              <Button
-                size="small"
-                loading={actionLoading === record.id}
-                icon={<XCircle size={13} />}
-                danger
-                style={{
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                Từ chối
-              </Button>
-            </Popconfirm>
+              Từ chối
+            </Button>
           </Space>
         );
       },
@@ -235,43 +222,63 @@ const TicketManager = () => {
   return (
     <div>
       <PageHeader
-        title="Quản Lý Ticket Khiếu Nại"
+        title="Quản lý ticket khiếu nại"
         description="Xem xét, phê duyệt hoặc từ chối các yêu cầu mở khóa tài khoản từ đối tác chủ nhà."
         onRefresh={fetchTickets}
         refreshLoading={loading}
       />
 
       {/* Summary Stats */}
-      <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
-        <Col xs={24} md={6}>
-          <TicketStatCard icon={<Inbox size={18} color="#64748b" />} label="TỔNG TICKET" value={tickets.length} color="#0f172a" bg="#f1f5f9" />
+      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <TicketStatCard icon={<Inbox size={20} />} label="Tổng ticket" value={tickets.length} color="#475569" bg="#F1F5F9" />
         </Col>
-        <Col xs={24} md={6}>
-          <TicketStatCard icon={<Clock size={18} color="#d97706" />} label="ĐANG CHỜ DUYỆT" value={pendingCount} color="#d97706" bg="#fffbeb" />
+        <Col xs={24} sm={12} lg={6}>
+          <TicketStatCard icon={<Clock size={20} />} label="Đang chờ duyệt" value={pendingCount} color="#B45309" bg="#FFFBEB" />
         </Col>
-        <Col xs={24} md={6}>
-          <TicketStatCard icon={<CheckCircle2 size={18} color="#16a34a" />} label="ĐÃ DUYỆT MỞ KHÓA" value={resolvedCount} color="#16a34a" bg="#f0fdf4" />
+        <Col xs={24} sm={12} lg={6}>
+          <TicketStatCard icon={<CheckCircle2 size={20} />} label="Đã duyệt mở khóa" value={resolvedCount} color="#15803D" bg="#F0FDF4" />
         </Col>
-        <Col xs={24} md={6}>
-          <TicketStatCard icon={<XCircle size={18} color="#dc2626" />} label="ĐÃ TỪ CHỐI" value={rejectedCount} color="#dc2626" bg="#fef2f2" />
+        <Col xs={24} sm={12} lg={6}>
+          <TicketStatCard icon={<XCircle size={20} />} label="Đã từ chối" value={rejectedCount} color="#DC2626" bg="#FEF2F2" />
         </Col>
       </Row>
 
-      <Card bordered={false} style={{ borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-            <Spin size="large" tip="Đang tải danh sách khiếu nại..." />
-          </div>
-        ) : (
-          <Table
-            dataSource={tickets}
-            columns={columns}
-            pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `${total} ticket` }}
-            rowKey="id"
-            size="middle"
-          />
-        )}
+      <Card styles={{ body: { padding: 0 } }}>
+        <Table
+          dataSource={tickets}
+          columns={columns}
+          loading={loading}
+          pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `${total} ticket` }}
+          rowKey="id"
+          size="middle"
+          scroll={{ x: 'max-content' }}
+        />
       </Card>
+
+      <Modal
+        title="Từ chối khiếu nại"
+        open={rejectTarget !== null}
+        onCancel={() => setRejectTarget(null)}
+        onOk={submitReject}
+        okText="Từ chối"
+        cancelText="Hủy"
+        okButtonProps={{ danger: true, disabled: trimmedReason.length < 5, loading: actionLoading === rejectTarget }}
+        destroyOnHidden
+      >
+        <p style={{ color: '#475569', marginTop: 0 }}>
+          Tài khoản chủ nhà vẫn giữ nguyên trạng thái BỊ KHÓA. Lý do sẽ được gửi qua email cho chủ nhà.
+        </p>
+        <Input.TextArea
+          rows={4}
+          maxLength={1000}
+          showCount
+          placeholder="Nhập lý do từ chối (tối thiểu 5 ký tự)"
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          aria-label="Lý do từ chối"
+        />
+      </Modal>
     </div>
   );
 };

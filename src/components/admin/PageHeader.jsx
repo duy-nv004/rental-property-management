@@ -7,46 +7,16 @@ import { RefreshCw } from 'lucide-react';
  * Hiển thị tiêu đề, mô tả và nút hành động tùy chọn.
  */
 const PageHeader = ({ title, description, onRefresh, refreshLoading = false, extra }) => (
-  <div style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '28px',
-  }}>
-    <div>
-      <h1 style={{
-        fontSize: '26px',
-        fontWeight: '800',
-        color: '#0f172a',
-        margin: '0 0 6px 0',
-        letterSpacing: '-0.5px',
-      }}>
-        {title}
-      </h1>
-      {description && (
-        <p style={{ color: '#64748b', margin: 0, fontSize: '14px', lineHeight: '1.5' }}>
-          {description}
-        </p>
-      )}
+  <div className="page-header">
+    <div className="page-header-main">
+      <h1 className="page-header-title">{title}</h1>
+      {description && <p className="page-header-desc">{description}</p>}
     </div>
 
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0, marginLeft: '16px' }}>
+    <div className="page-header-actions">
       {extra}
       {onRefresh && (
-        <Button
-          onClick={onRefresh}
-          loading={refreshLoading}
-          icon={<RefreshCw size={14} />}
-          style={{
-            borderRadius: '8px',
-            height: '38px',
-            fontWeight: '600',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-        >
+        <Button onClick={onRefresh} loading={refreshLoading} icon={<RefreshCw size={14} />}>
           Làm mới
         </Button>
       )}

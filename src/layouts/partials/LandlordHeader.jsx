@@ -4,6 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, LogOut, Building, Menu as MenuIcon } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 
+const getLandlordNotificationRoute = (notification) => {
+  const type = String(notification?.type || '').toLowerCase();
+  if (type.includes('support')) return '/landlord/support';
+  if (type.includes('invoice') || type.includes('payment')) return '/landlord/invoices';
+  if (type.includes('contract')) return '/landlord/contracts';
+  if (type.includes('plan')) return '/landlord/plans';
+  if (type.includes('telegram')) return '/landlord/profile';
+  return null;
+};
+
 const LandlordHeader = ({ onMenuClick }) => {
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -15,7 +25,8 @@ const LandlordHeader = ({ onMenuClick }) => {
   const fetchNotifications = async () => {
     try {
       const data = await axiosInstance.get('/notifications');
-      setNotifications(data);
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+      setNotifications(list);
     } catch (err) {
       console.error("Lỗi lấy thông báo:", err);
     }
@@ -43,6 +54,17 @@ const LandlordHeader = ({ onMenuClick }) => {
       fetchNotifications();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleNotificationClick = (item) => {
+    if (!item.isRead) {
+      handleMarkAsRead(item.id);
+    }
+    const targetRoute = getLandlordNotificationRoute(item);
+    if (targetRoute) {
+      setPopoverOpen(false);
+      navigate(targetRoute);
     }
   };
 
@@ -77,7 +99,7 @@ const LandlordHeader = ({ onMenuClick }) => {
           {notifications.map((item) => (
             <div 
               key={item.id} 
-              onClick={() => handleMarkAsRead(item.id)}
+              onClick={() => handleNotificationClick(item)}
               style={{
                 padding: '8px 12px',
                 borderRadius: '6px',

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Row, Col, Card, Form, Input, Button, message, Divider, Space, Avatar, Spin, Alert } from 'antd';
-import { User, ShieldAlert, KeyRound, Save, Send, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Row, Col, Card, Form, Input, Button, message, Avatar, Spin, Alert } from 'antd';
+import { User, KeyRound, Save, Send, CheckCircle2 } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
+import PageHeader from '../../components/admin/PageHeader';
 
 const LandlordProfile = () => {
   const [profileForm] = Form.useForm();
@@ -11,7 +12,7 @@ const LandlordProfile = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState({});
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       const response = await axiosInstance.get('/auth/profile');
       setUser(response);
@@ -29,11 +30,11 @@ const LandlordProfile = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [profileForm]);
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [fetchProfile]);
 
   const handleUpdateProfile = async (values) => {
     setProfileLoading(true);
@@ -47,14 +48,10 @@ const LandlordProfile = () => {
         hometown: values.hometown
       });
       message.success('Cập nhật hồ sơ cá nhân thành công!');
-      
-      // Cập nhật lại state
+
       setUser(response);
-      
       // Lưu lại thông tin mới vào localStorage để đồng bộ Header
       localStorage.setItem('username', response.name);
-      
-      // Kích hoạt sự kiện để Header tự động reload dữ liệu mới
       window.dispatchEvent(new Event('storage'));
     } catch (err) {
       console.error('Error updating profile:', err);
@@ -68,10 +65,12 @@ const LandlordProfile = () => {
   const handleChangePassword = async (values) => {
     setPasswordLoading(true);
     try {
-      await axiosInstance.put('/auth/change-password', {
+      const res = await axiosInstance.put('/auth/change-password', {
         currentPassword: values.oldPassword,
         newPassword: values.newPassword
       });
+      // Đổi mật khẩu thu hồi mọi phiên cũ -> phải lưu token mới
+      if (res?.token) localStorage.setItem('accessToken', res.token);
       message.success('Đổi mật khẩu thành công!');
       passwordForm.resetFields();
     } catch (err) {
@@ -85,141 +84,90 @@ const LandlordProfile = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-        <Spin size="large" tip="Đang tải thông tin hồ sơ..." />
+      <div style={{ display: 'grid', placeItems: 'center', height: '60vh' }}>
+        <Spin size="large" />
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ color: '#8c8c8c', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>Cấu Hình  •  Tài Khoản</div>
-        <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#1a3353', margin: 0 }}>Cài đặt hồ sơ cá nhân</h1>
-      </div>
+      <PageHeader title="Cài đặt hồ sơ cá nhân" description="Cập nhật thông tin liên hệ và mật khẩu đăng nhập của bạn." />
 
-      <Row gutter={[24, 24]}>
-        {/* CỘT TRÁI: THÔNG TIN HỒ SƠ */}
-        <Col xs={24} md={12}>
-          <Card 
-            title={<Space><User size={18} color="#1a3353" /> Thông tin cá nhân</Space>}
-            bordered={false}
-            style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
-              <Avatar 
-                size={80} 
-                src={`https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(user.name || 'Landlord')}`}
-                style={{ background: '#f1f5f9', marginBottom: '12px' }}
-              />
-              <strong style={{ fontSize: '18px', color: '#1a3353' }}>{user.name}</strong>
-              <span style={{ fontSize: '12px', color: '#8c8c8c', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '4px' }}>
-                Vai trò: {user.role || 'Chủ nhà'}
+      <Row gutter={[20, 20]}>
+        <Col xs={24} lg={12}>
+          <Card title={<span className="card-title"><User size={18} color="#0F766E" aria-hidden="true" /> Thông tin cá nhân</span>}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+              <Avatar size={80} style={{ background: '#CCFBF1', color: '#0F766E', fontWeight: 700, fontSize: 30, marginBottom: 12 }}>
+                {(user.name || 'C').trim().charAt(0).toUpperCase()}
+              </Avatar>
+              <strong style={{ fontSize: 18, color: '#0F172A' }}>{user.name}</strong>
+              <span style={{ fontSize: 12, color: '#64748B', textTransform: 'uppercase', fontWeight: 600, letterSpacing: 0.6, marginTop: 4 }}>
+                {user.role === 'landlord' ? 'Chủ nhà' : (user.role || 'Chủ nhà')}
               </span>
             </div>
 
-            <Form
-              form={profileForm}
-              layout="vertical"
-              onFinish={handleUpdateProfile}
-              requiredMark={false}
-            >
-              <Form.Item
-                name="name"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Họ và tên</span>}
-                rules={[{ required: true, message: 'Vui lòng điền họ tên!' }]}
-              >
-                <Input placeholder="Nhập họ tên của bạn" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+            <Form form={profileForm} layout="vertical" onFinish={handleUpdateProfile} requiredMark={false}>
+              <Form.Item name="name" label="Họ và tên" rules={[{ required: true, message: 'Vui lòng điền họ tên!' }]}>
+                <Input placeholder="Nhập họ tên của bạn" autoComplete="name" />
               </Form.Item>
 
               <Form.Item
                 name="email"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Địa chỉ Email</span>}
+                label="Địa chỉ Email"
                 rules={[
                   { required: true, message: 'Vui lòng nhập Email!' },
                   { type: 'email', message: 'Địa chỉ email không hợp lệ!' }
                 ]}
               >
-                <Input placeholder="example@mail.com" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+                <Input placeholder="ban@example.com" autoComplete="email" />
               </Form.Item>
 
-              <Form.Item
-                name="phone"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số điện thoại liên hệ</span>}
-              >
-                <Input placeholder="Nhập số điện thoại" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+              <Form.Item name="phone" label="Số điện thoại liên hệ">
+                <Input placeholder="Ví dụ: 0987654321" inputMode="numeric" autoComplete="tel" />
               </Form.Item>
 
-              <Form.Item
-                name="cccd"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số CCCD chủ nhà</span>}
-              >
-                <Input placeholder="Ví dụ: 001196008731" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+              <Form.Item name="cccd" label="Số CCCD chủ nhà">
+                <Input placeholder="Ví dụ: 001196008731" inputMode="numeric" />
               </Form.Item>
 
-              <Form.Item
-                name="dob"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Ngày tháng năm sinh</span>}
-              >
-                <Input placeholder="Ví dụ: 10/05/1985" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+              <Form.Item name="dob" label="Ngày tháng năm sinh">
+                <Input placeholder="Ví dụ: 10/05/1985" />
               </Form.Item>
 
-              <Form.Item
-                name="hometown"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Hộ khẩu thường trú (HKTT)</span>}
-              >
-                <Input placeholder="Ví dụ: Ba Đình, Hà Nội" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+              <Form.Item name="hometown" label="Hộ khẩu thường trú">
+                <Input placeholder="Ví dụ: Ba Đình, Hà Nội" />
               </Form.Item>
 
-              <Button 
-                type="primary" 
-                htmlType="submit"
-                loading={profileLoading}
-                icon={<Save size={16} />}
-                style={{ background: '#1a3353', border: 'none', height: '40px', borderRadius: '8px', fontWeight: 'bold', marginTop: '8px' }}
-                block
-              >
+              <Button type="primary" htmlType="submit" loading={profileLoading} icon={<Save size={16} />} block>
                 Lưu hồ sơ cá nhân
               </Button>
             </Form>
           </Card>
         </Col>
 
-        {/* CỘT PHẢI: ĐỔI MẬT KHẨU */}
-        <Col xs={24} md={12}>
-          <Card 
-            title={<Space><KeyRound size={18} color="#1a3353" /> Đổi mật khẩu bảo mật</Space>}
-            bordered={false}
-            style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}
-          >
-            <Form
-              form={passwordForm}
-              layout="vertical"
-              onFinish={handleChangePassword}
-              requiredMark={false}
-            >
-              <Form.Item
-                name="oldPassword"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Mật khẩu hiện tại</span>}
-                rules={[{ required: true, message: 'Vui lòng nhập mật khẩu hiện tại!' }]}
-              >
-                <Input.Password placeholder="Nhập mật khẩu cũ" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+        <Col xs={24} lg={12}>
+          <Card title={<span className="card-title"><KeyRound size={18} color="#0F766E" aria-hidden="true" /> Đổi mật khẩu</span>}>
+            <Form form={passwordForm} layout="vertical" onFinish={handleChangePassword} requiredMark={false}>
+              <Form.Item name="oldPassword" label="Mật khẩu hiện tại" rules={[{ required: true, message: 'Vui lòng nhập mật khẩu hiện tại!' }]}>
+                <Input.Password placeholder="••••••••" autoComplete="current-password" />
               </Form.Item>
 
               <Form.Item
                 name="newPassword"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Mật khẩu mới</span>}
+                label="Mật khẩu mới"
+                extra="Tối thiểu 6 ký tự"
                 rules={[
                   { required: true, message: 'Vui lòng nhập mật khẩu mới!' },
                   { min: 6, message: 'Mật khẩu phải dài tối thiểu 6 ký tự!' }
                 ]}
               >
-                <Input.Password placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+                <Input.Password placeholder="••••••••" autoComplete="new-password" />
               </Form.Item>
 
               <Form.Item
                 name="confirmPassword"
-                label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Xác nhận mật khẩu mới</span>}
+                label="Xác nhận mật khẩu mới"
                 dependencies={['newPassword']}
                 rules={[
                   { required: true, message: 'Vui lòng xác nhận mật khẩu mới!' },
@@ -233,54 +181,44 @@ const LandlordProfile = () => {
                   }),
                 ]}
               >
-                <Input.Password placeholder="Nhập lại mật khẩu mới" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+                <Input.Password placeholder="••••••••" autoComplete="new-password" />
               </Form.Item>
 
-              <Button 
-                type="primary" 
-                htmlType="submit"
-                loading={passwordLoading}
-                icon={<KeyRound size={16} />}
-                style={{ background: '#ef4444', border: 'none', height: '40px', borderRadius: '8px', fontWeight: 'bold', marginTop: '8px' }}
-                block
-              >
-                Cập nhật mật khẩu mới
+              <Button type="primary" htmlType="submit" loading={passwordLoading} icon={<KeyRound size={16} />} block>
+                Cập nhật mật khẩu
               </Button>
             </Form>
           </Card>
 
-          {/* TELEGRAM STATUS CARD */}
-          <Card 
-            title={<Space><Send size={18} color="#1a3353" /> Kết nối Telegram Bot</Space>} 
-            bordered={false} 
-            style={{ borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', marginTop: '24px' }}
+          <Card
+            title={<span className="card-title"><Send size={18} color="#0F766E" aria-hidden="true" /> Kết nối Telegram Bot</span>}
+            style={{ marginTop: 20 }}
           >
             {user.telegramChatId ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                <CheckCircle2 size={16} color="#16a34a" />
-                <span style={{ fontSize: '13px', color: '#15803d', fontWeight: '600' }}>
-                  Đã liên kết Telegram thành công (ID: {user.telegramChatId})
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F0FDF4', padding: 12, borderRadius: 8, border: '1px solid #BBF7D0' }}>
+                <CheckCircle2 size={16} color="#15803D" aria-hidden="true" />
+                <span style={{ fontSize: 13, color: '#15803D', fontWeight: 600 }}>
+                  Đã liên kết Telegram (ID: {user.telegramChatId})
                 </span>
               </div>
             ) : (
-              <div>
-                <Alert 
-                  message="Chưa kết nối Telegram"
-                  description="Hãy kết nối với Bot Telegram để nhận thông báo báo hỏng tức thời từ khách thuê và xem nhanh các báo cáo của bạn."
+              <>
+                <Alert
                   type="warning"
                   showIcon
-                  style={{ borderRadius: '8px', marginBottom: '16px' }}
+                  message="Chưa kết nối Telegram"
+                  description="Kết nối Bot Telegram để nhận thông báo báo hỏng tức thời từ khách thuê."
+                  style={{ marginBottom: 16 }}
                 />
-                <Button 
-                  type="primary" 
-                  block 
-                  icon={<Send size={15} />}
-                  style={{ background: '#0088cc', border: 'none', borderRadius: '8px', height: '40px', fontWeight: '700' }}
-                  onClick={() => window.open(`https://t.me/phongtro_smart_bot?start=${user.id}`, '_blank')}
+                <Button
+                  type="primary"
+                  block
+                  icon={<Send size={16} />}
+                  onClick={() => window.open(`https://t.me/phongtro_smart_bot?start=${user.id}`, '_blank', 'noopener')}
                 >
                   Kết nối Bot Telegram
                 </Button>
-              </div>
+              </>
             )}
           </Card>
         </Col>

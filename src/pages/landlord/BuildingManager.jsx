@@ -1,19 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Row, Col, Card, Button, Modal, Form, Input, InputNumber, Select, 
-  message, Popconfirm, Empty, Spin, Space, Tooltip 
+  message, Popconfirm, Empty, Spin, Tooltip, Alert
 } from 'antd';
 import { 
   Plus, MapPin, Trash2, Building, Settings, Home, 
   User, AlertTriangle, Clock, CheckCircle2, ArrowRight, ArrowLeft, Edit2,
-  FileSignature, Zap, Users, Maximize2
+  FileSignature, Zap, Users, Maximize2, RotateCcw, Wrench
 } from 'lucide-react';
+import PageHeader from '../../components/admin/PageHeader';
 import axiosInstance from '../../utils/axios';
 
 const formatVND = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
 };
+
+// Trạng thái phòng: dùng chung cho bộ lọc, chú thích và thẻ phòng (T2.19: thêm maintenance)
+const ROOM_STATUSES = [
+  { key: 'available', label: 'Còn trống', Icon: CheckCircle2 },
+  { key: 'reserved', label: 'Chờ ký HĐ', Icon: FileSignature },
+  { key: 'occupied', label: 'Đang thuê', Icon: User },
+  { key: 'overdue', label: 'Chưa thanh toán', Icon: AlertTriangle },
+  { key: 'expiring', label: 'Sắp hết hạn HĐ', Icon: Clock },
+  { key: 'expired', label: 'Quá hạn HĐ', Icon: AlertTriangle },
+  { key: 'maintenance', label: 'Đang bảo trì', Icon: Wrench },
+];
+const STATUS_BY_KEY = Object.fromEntries(ROOM_STATUSES.map(s => [s.key, s]));
 
 const BuildingManager = () => {
   const navigate = useNavigate();
@@ -23,14 +36,20 @@ const BuildingManager = () => {
   
   // Tòa nhà đang được chọn để xem danh sách phòng (nếu null -> hiển thị danh sách tòa nhà)
   const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const selectedBuildingIdRef = useRef(null);
+  selectedBuildingIdRef.current = selectedBuilding?.id || null;
 
   // Modals
   const [buildingModalVisible, setBuildingModalVisible] = useState(false);
   const [roomModalVisible, setRoomModalVisible] = useState(false);
   const [serviceModalVisible, setServiceModalVisible] = useState(false);
+  // Tòa nhà đang sửa đơn giá dịch vụ. Trước đây dùng selectedBuilding nên mở modal
+  // từ danh sách (selectedBuilding = null) thì lưu không chạy.
+  const [serviceBuilding, setServiceBuilding] = useState(null);
   const [editRoomModalVisible, setEditRoomModalVisible] = useState(false);
 
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
   const [submitLoading, setSubmitLoading] = useState(false);
 
   const [buildingForm] = Form.useForm();
@@ -44,7 +63,7 @@ const BuildingManager = () => {
     'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?q=80&w=500'
   ];
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [buildingsData, roomsData] = await Promise.all([
@@ -56,8 +75,8 @@ const BuildingManager = () => {
       setRooms(roomsData);
 
       // Cập nhật thông tin selectedBuilding nếu đang ở trong view xem phòng
-      if (selectedBuilding) {
-        const updatedSelected = buildingsData.find(b => b.id === selectedBuilding.id);
+      if (selectedBuildingIdRef.current) {
+        const updatedSelected = buildingsData.find(b => b.id === selectedBuildingIdRef.current);
         setSelectedBuilding(updatedSelected || null);
       }
     } catch (err) {
@@ -66,11 +85,18 @@ const BuildingManager = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
+  useEffect(() => {
+    const onChanged = () => { fetchData(); };
+    window.addEventListener('app:data-changed', onChanged);
+    return () => window.removeEventListener('app:data-changed', onChanged);
+  }, [fetchData]);
 
   // ─── TẠO TÒA NHÀ MỚI ────────────────────────────────────────────────────────
   const handleCreateBuilding = async (values) => {
@@ -111,11 +137,13 @@ const BuildingManager = () => {
     }
   };
 
-  // ─── ĐƠN GIÁ DỊCH VỤ ────────────────────────────────────────────────────────
+  // ─── ĐƠN GIÁ DỊCH VỤ (T2.18: đồng bộ waterPrice 30000) ───────────────────────
   const handleOpenServiceModal = (building) => {
+    if (!building) return;
+    setServiceBuilding(building);
     const s = building.service || {
       electricityPrice: 3500,
-      waterPrice: 20000,
+      waterPrice: 30000,
       internetPrice: 100000,
       cleaningPrice: 50000
     };
@@ -129,10 +157,10 @@ const BuildingManager = () => {
   };
 
   const handleUpdateService = async (values) => {
-    if (!selectedBuilding) return;
+    if (!serviceBuilding) return;
     setSubmitLoading(true);
     try {
-      await axiosInstance.put(`/manage/buildings/${selectedBuilding.id}/service`, values);
+      await axiosInstance.put(`/manage/buildings/${serviceBuilding.id}/service`, values);
       message.success('Đã cập nhật đơn giá dịch vụ tòa nhà!');
       setServiceModalVisible(false);
       fetchData();
@@ -169,13 +197,20 @@ const BuildingManager = () => {
   };
 
   // ─── SỬA THÔNG TIN PHÒNG ────────────────────────────────────────────────────
+  const isRoomOccupiedOrReserved = (room) => {
+    if (!room) return false;
+    if (['occupied', 'reserved'].includes(room.status)) return true;
+    return Array.isArray(room.contracts) && room.contracts.length > 0;
+  };
+
   const handleOpenEditRoomModal = (room) => {
     setSelectedRoom(room);
     editRoomForm.setFieldsValue({
       roomNumber: room.roomNumber,
       price: parseFloat(room.price),
       capacity: room.capacity || 2,
-      area: room.area ? parseFloat(room.area) : 20
+      area: room.area ? parseFloat(room.area) : 20,
+      status: room.status === 'maintenance' ? 'maintenance' : 'empty'
     });
     setEditRoomModalVisible(true);
   };
@@ -184,12 +219,16 @@ const BuildingManager = () => {
     if (!selectedRoom) return;
     setSubmitLoading(true);
     try {
-      await axiosInstance.put(`/manage/rooms/${selectedRoom.id}`, {
+      const payload = {
         roomNumber: values.roomNumber,
         price: values.price,
         capacity: values.capacity,
         area: values.area
-      });
+      };
+      if (!isRoomOccupiedOrReserved(selectedRoom) && values.status) {
+        payload.status = values.status;
+      }
+      await axiosInstance.put(`/manage/rooms/${selectedRoom.id}`, payload);
       message.success('Cập nhật thông tin phòng thành công!');
       setEditRoomModalVisible(false);
       fetchData();
@@ -213,67 +252,29 @@ const BuildingManager = () => {
     }
   };
 
-  // ─── LOGIC TRẠNG THÁI PHÒNG ────────────────────────────────────────────────
+  // ─── LOGIC TRẠNG THÁI PHÒNG (T2.19: hỗ trợ maintenance) ─────────────────────
   const getRoomStatusDetails = (room) => {
-    const hasUnpaidInvoice = room.invoices && room.invoices.some(inv => !inv.isPaid);
+    if (room.status === 'maintenance') {
+      return { key: 'maintenance', tenantName: null, contractId: null };
+    }
     const activeContract = room.contracts && room.contracts.find(c => c.status === 'active');
-    const tenantName = activeContract?.tenant?.name || 'N/A';
+    const tenantName = activeContract?.tenant?.name || null;
+    // Chỉ tính hóa đơn của hợp đồng hiện tại: nợ của khách cũ không làm phòng bị đánh dấu "Chưa thanh toán".
+    const hasUnpaidInvoice = !!activeContract && (room.invoices || []).some(inv => !inv.isPaid && inv.contractId === activeContract.id);
 
-    let isExpiringSoon = false;
+    let diffDays = null;
     if (activeContract && activeContract.endDate) {
-      const today = new Date();
-      const end = new Date(activeContract.endDate);
-      const diffDays = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-      if (diffDays >= 0 && diffDays <= 30) {
-        isExpiringSoon = true;
-      }
+      diffDays = Math.ceil((new Date(activeContract.endDate) - new Date()) / (1000 * 60 * 60 * 24));
     }
 
-    if (hasUnpaidInvoice) {
-      return {
-        key: 'overdue',
-        label: 'OVERDUE PAYMENT',
-        subLabel: tenantName !== 'N/A' ? tenantName : 'Chưa đóng tiền',
-        color: '#f59e0b',
-        borderLeft: '4px solid #f59e0b',
-        bg: '#ffffff',
-        icon: <AlertTriangle size={20} color="#f59e0b" />
-      };
-    }
-
-    if (isExpiringSoon) {
-      return {
-        key: 'expiring',
-        label: 'EXPIRING CONTRACT',
-        subLabel: tenantName !== 'N/A' ? tenantName : 'Sắp hết hạn',
-        color: '#8b5cf6',
-        borderLeft: '4px solid #8b5cf6',
-        bg: '#ffffff',
-        icon: <Clock size={20} color="#8b5cf6" />
-      };
-    }
-
-    if (activeContract || room.status === 'occupied') {
-      return {
-        key: 'occupied',
-        label: 'OCCUPIED',
-        subLabel: tenantName !== 'N/A' ? tenantName : 'Đã thuê',
-        color: '#3b82f6',
-        borderLeft: '4px solid #3b82f6',
-        bg: '#ffffff',
-        icon: <User size={20} color="#3b82f6" />
-      };
-    }
-
-    return {
-      key: 'available',
-      label: 'AVAILABLE',
-      subLabel: 'Ready to Lease',
-      color: '#10b981',
-      borderLeft: '4px solid #10b981',
-      bg: '#f0fdf4',
-      icon: <CheckCircle2 size={20} color="#10b981" />
-    };
+    const contractId = activeContract?.id || null;
+    if (diffDays !== null && diffDays < 0) return { key: 'expired', tenantName, contractId };
+    if (hasUnpaidInvoice) return { key: 'overdue', tenantName, contractId };
+    if (diffDays !== null && diffDays <= 30) return { key: 'expiring', tenantName, contractId };
+    if (activeContract || room.status === 'occupied') return { key: 'occupied', tenantName, contractId };
+    // Đã lập hợp đồng, đang chờ khách ký (backend giữ chỗ phòng ở trạng thái 'reserved')
+    if (room.status === 'reserved') return { key: 'reserved', tenantName: null, contractId: null };
+    return { key: 'available', tenantName: null, contractId: null };
   };
 
   // ─── GOM PHÒNG THEO TẦNG ────────────────────────────────────────────────────
@@ -291,10 +292,25 @@ const BuildingManager = () => {
     ? rooms.filter(r => r.buildingId === selectedBuilding.id)
     : [];
 
-  const groupedRoomsByFloor = currentBuildingRooms.reduce((acc, room) => {
-    const floor = getFloorNumber(room.roomNumber);
+  const roomsWithStatus = currentBuildingRooms.map(room => ({ room, status: getRoomStatusDetails(room) }));
+
+  const statusCounts = roomsWithStatus.reduce((acc, { status }) => {
+    acc[status.key] = (acc[status.key] || 0) + 1;
+    return acc;
+  }, {});
+  const totalRooms = currentBuildingRooms.length;
+  const occupancyRate = totalRooms
+    ? Math.round(((totalRooms - (statusCounts.available || 0) - (statusCounts.maintenance || 0)) / totalRooms) * 100)
+    : 0;
+
+  const visibleRooms = statusFilter === 'all'
+    ? roomsWithStatus
+    : roomsWithStatus.filter(r => r.status.key === statusFilter);
+
+  const groupedRoomsByFloor = visibleRooms.reduce((acc, item) => {
+    const floor = getFloorNumber(item.room.roomNumber);
     if (!acc[floor]) acc[floor] = [];
-    acc[floor].push(room);
+    acc[floor].push(item);
     return acc;
   }, {});
 
@@ -302,77 +318,96 @@ const BuildingManager = () => {
     .map(Number)
     .sort((a, b) => b - a);
 
+
+  const modalTitle = (icon, text) => <span className="modal-title">{icon} {text}</span>;
+
+  // Form đơn giá dịch vụ dùng chung cho cả 2 view (T2.18: thêm chú thích lưu ý)
+  const serviceFormItems = (
+    <>
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="Lưu ý: Đơn giá mới chỉ áp dụng cho các hợp đồng tạo mới, không làm thay đổi hợp đồng đang hiệu lực."
+      />
+      <Form.Item name="electricityPrice" label="Đơn giá Điện (VND/kWh)" rules={[{ required: true }]}>
+        <InputNumber min={0} className="w-full" />
+      </Form.Item>
+      <Form.Item name="waterPrice" label="Đơn giá Nước (VND/m³)" rules={[{ required: true }]}>
+        <InputNumber min={0} className="w-full" />
+      </Form.Item>
+      <Form.Item name="internetPrice" label="Internet / tháng (VND)" rules={[{ required: true }]}>
+        <InputNumber min={0} className="w-full" />
+      </Form.Item>
+      <Form.Item name="cleaningPrice" label="Phí vệ sinh / tháng (VND)" rules={[{ required: true }]}>
+        <InputNumber min={0} className="w-full" />
+      </Form.Item>
+    </>
+  );
+
   if (loading && buildings.length === 0) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <div className="loading-center">
         <Spin size="large" tip="Đang tải danh sách tòa nhà..." />
       </div>
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // VIEW 1: TRANG DANH SÁCH TÒA NHÀ (GIỮ NGUYÊN THIẾT KẾ GỐC)
+  // VIEW 1: TRANG DANH SÁCH TÒA NHÀ
   // ─────────────────────────────────────────────────────────────────────────────
   if (!selectedBuilding) {
     return (
-      <div style={{ paddingBottom: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <div style={{ color: '#8c8c8c', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>
-              Danh mục • Tòa nhà
-            </div>
-            <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#1a3353', margin: 0 }}>Quản lý Tòa nhà</h1>
-          </div>
-          <Button 
-            type="primary" 
-            icon={<Plus size={16} />} 
-            style={{ background: '#1a3353', border: 'none', height: '40px', borderRadius: '8px', fontWeight: 'bold' }}
-            onClick={() => {
-              buildingForm.resetFields();
-              setBuildingModalVisible(true);
-            }}
-          >
-            Thêm tòa nhà mới
-          </Button>
-        </div>
+      <div className="page-shell">
+        <PageHeader
+          title="Quản lý Tòa nhà"
+          description="Danh mục tòa nhà, số phòng và đơn giá dịch vụ chung."
+          extra={
+            <Button
+              type="primary"
+              size="large"
+              icon={<Plus size={16} aria-hidden="true" />}
+              onClick={() => {
+                buildingForm.resetFields();
+                setBuildingModalVisible(true);
+              }}
+            >
+              Thêm tòa nhà mới
+            </Button>
+          }
+        />
 
         {buildings.length === 0 ? (
-          <Card bordered={false} style={{ textAlign: 'center', padding: '40px 0', borderRadius: '12px' }}>
+          <Card variant="borderless" className="stat-card empty-card">
             <Empty description="Bạn chưa thêm tòa nhà nào" />
-            <Button 
-              type="dashed" 
-              style={{ marginTop: '16px' }}
-              onClick={() => setBuildingModalVisible(true)}
-            >
+            <Button type="dashed" onClick={() => setBuildingModalVisible(true)}>
               Thêm ngay
             </Button>
           </Card>
         ) : (
-          <Row gutter={[24, 24]}>
+          <Row gutter={[20, 20]}>
             {buildings.map((b, i) => {
               const buildingRoomCount = rooms.filter(r => r.buildingId === b.id).length;
               return (
-                <Col xs={24} sm={12} md={8} key={b.id}>
-                  <Card 
+                <Col xs={24} sm={12} lg={8} key={b.id}>
+                  <Card
+                    variant="borderless"
+                    className="stat-card building-card"
+                    hoverable
                     cover={
-                      <img 
-                        alt="building" 
-                        src={defaultImages[i % defaultImages.length]} 
-                        style={{ height: 180, objectFit: 'cover', cursor: 'pointer' }} 
+                      <img
+                        alt={`Ảnh tòa nhà ${b.name}`}
+                        src={defaultImages[i % defaultImages.length]}
+                        className="building-cover"
+                        loading="lazy"
                         onClick={() => setSelectedBuilding(b)}
                       />
-                    } 
-                    hoverable 
-                    style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}
-                    bodyStyle={{ padding: '20px' }}
+                    }
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <h3 
-                        style={{ color: '#1a3353', fontWeight: '800', fontSize: '16px', margin: '0 0 6px 0', cursor: 'pointer' }}
-                        onClick={() => setSelectedBuilding(b)}
-                      >
+                    <div className="building-head">
+                      <button type="button" className="building-name" onClick={() => setSelectedBuilding(b)}>
                         {b.name}
-                      </h3>
+                      </button>
                       <Popconfirm
                         title="Xóa tòa nhà"
                         description="Bạn có chắc chắn muốn xóa tòa nhà này không? Chỉ xóa được khi tòa nhà không còn phòng trọ nào."
@@ -380,53 +415,31 @@ const BuildingManager = () => {
                         cancelText="Hủy"
                         onConfirm={() => handleDeleteBuilding(b.id)}
                       >
-                        <Button 
-                          type="text" 
-                          danger 
-                          icon={<Trash2 size={16} />} 
-                          style={{ padding: 0, height: 'auto' }}
-                        />
+                        <Button type="text" danger size="small" aria-label={`Xóa tòa nhà ${b.name}`} icon={<Trash2 size={16} aria-hidden="true" />} />
                       </Popconfirm>
                     </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8c8c8c', marginBottom: '16px', fontSize: '12.5px' }}>
-                      <MapPin size={14} style={{ flexShrink: 0 }} /> 
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.address}</span>
+
+                    <div className="building-addr" title={b.address}>
+                      <MapPin size={14} aria-hidden="true" />
+                      <span>{b.address}</span>
                     </div>
-                    
-                    <div style={{ display: 'flex', background: '#f8fafc', padding: '10px', borderRadius: '8px', marginBottom: '16px' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '10px', color: '#bfbfbf', fontWeight: 'bold' }}>SỐ PHÒNG</div>
-                        <div style={{ fontWeight: 'bold', color: '#475569', fontSize: '13px' }}>{buildingRoomCount} phòng</div>
+
+                    <div className="building-stats">
+                      <div>
+                        <div className="building-stat-label">SỐ PHÒNG</div>
+                        <div className="building-stat-value">{buildingRoomCount} phòng</div>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '10px', color: '#bfbfbf', fontWeight: 'bold' }}>NGÀY TẠO</div>
-                        <div style={{ fontWeight: 'bold', color: '#475569', fontSize: '13px' }}>
-                          {new Date(b.createdAt).toLocaleDateString('vi-VN')}
-                        </div>
+                      <div>
+                        <div className="building-stat-label">NGÀY TẠO</div>
+                        <div className="building-stat-value">{new Date(b.createdAt).toLocaleDateString('vi-VN')}</div>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {/* NÚT BẤM VÀO XEM SƠ ĐỒ PHÒNG CỦA TÒA NHÀ */}
-                      <Button 
-                        type="primary" 
-                        icon={<ArrowRight size={14} />}
-                        block
-                        style={{ background: '#1a3353', border: 'none', borderRadius: '8px', fontWeight: '700', height: '36px' }}
-                        onClick={() => setSelectedBuilding(b)}
-                      >
+                    <div className="building-actions">
+                      <Button type="primary" block className="btn-dark" icon={<ArrowRight size={14} aria-hidden="true" />} onClick={() => setSelectedBuilding(b)}>
                         Xem sơ đồ phòng
                       </Button>
-
-                      <Button 
-                        type="dashed" 
-                        icon={<Settings size={14} />}
-                        size="small" 
-                        block
-                        style={{ borderRadius: '8px', fontWeight: '600', color: '#1a3353', border: '1px dashed #1a3353', height: '32px' }}
-                        onClick={() => handleOpenServiceModal(b)}
-                      >
+                      <Button type="dashed" block icon={<Settings size={14} aria-hidden="true" />} onClick={() => handleOpenServiceModal(b)}>
                         Đơn giá dịch vụ chung
                       </Button>
                     </div>
@@ -439,296 +452,250 @@ const BuildingManager = () => {
 
         {/* MODAL THÊM TÒA NHÀ MỚI */}
         <Modal
-          title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><Building size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Thêm Tòa nhà mới</span>}
+          title={modalTitle(<Building size={18} aria-hidden="true" />, 'Thêm Tòa nhà mới')}
           open={buildingModalVisible}
           onCancel={() => setBuildingModalVisible(false)}
           footer={[
-            <Button key="cancel" onClick={() => setBuildingModalVisible(false)} style={{ borderRadius: '8px' }}>Hủy</Button>,
-            <Button key="submit" type="primary" loading={submitLoading} style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }} onClick={() => buildingForm.submit()}>Lưu lại</Button>
+            <Button key="cancel" onClick={() => setBuildingModalVisible(false)}>Hủy</Button>,
+            <Button key="submit" type="primary" loading={submitLoading} onClick={() => buildingForm.submit()}>Lưu lại</Button>
           ]}
           width={450}
           centered
         >
-          <Form form={buildingForm} layout="vertical" onFinish={handleCreateBuilding} requiredMark={false} style={{ marginTop: '16px' }}>
-            <Form.Item name="name" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Tên tòa nhà</span>} rules={[{ required: true, message: 'Vui lòng nhập tên tòa nhà!' }]}>
-              <Input placeholder="Ví dụ: Sunshine House, Chung cư cao cấp Láng" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+          <Form form={buildingForm} layout="vertical" onFinish={handleCreateBuilding} requiredMark={false} className="modal-form">
+            <Form.Item name="name" label="Tên tòa nhà" rules={[{ required: true, message: 'Vui lòng nhập tên tòa nhà!' }]}>
+              <Input size="large" placeholder="Ví dụ: Sunshine House, Chung cư cao cấp Láng" />
             </Form.Item>
-            <Form.Item name="address" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Địa chỉ</span>} rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}>
-              <Input.TextArea rows={2} placeholder="Số nhà, Tên đường, Quận/Huyện, Tỉnh/TP" style={{ borderRadius: '8px' }} />
+            <Form.Item name="address" label="Địa chỉ" rules={[{ required: true, message: 'Vui lòng nhập địa chỉ!' }]}>
+              <Input.TextArea rows={2} placeholder="Số nhà, Tên đường, Quận/Huyện, Tỉnh/TP" />
             </Form.Item>
           </Form>
         </Modal>
 
         {/* MODAL ĐƠN GIÁ DỊCH VỤ CHUNG */}
         <Modal
-          title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><Building size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Cấu hình dịch vụ: {selectedBuilding?.name}</span>}
+          title={modalTitle(<Building size={18} aria-hidden="true" />, `Cấu hình dịch vụ: ${serviceBuilding?.name || ''}`)}
           open={serviceModalVisible}
           onCancel={() => setServiceModalVisible(false)}
           footer={[
-            <Button key="cancel" onClick={() => setServiceModalVisible(false)} style={{ borderRadius: '8px' }}>Hủy</Button>,
-            <Button key="submit" type="primary" loading={submitLoading} style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }} onClick={() => serviceForm.submit()}>Lưu thay đổi</Button>
+            <Button key="cancel" onClick={() => setServiceModalVisible(false)}>Hủy</Button>,
+            <Button key="submit" type="primary" loading={submitLoading} onClick={() => serviceForm.submit()}>Lưu thay đổi</Button>
           ]}
           width={450}
           centered
         >
-          <Form form={serviceForm} layout="vertical" onFinish={handleUpdateService} requiredMark={false} style={{ marginTop: '16px' }}>
-            <Form.Item name="electricityPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Đơn giá Điện (VND/kWh)</span>} rules={[{ required: true }]}>
-              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
-            <Form.Item name="waterPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Đơn giá Nước (VND/m³)</span>} rules={[{ required: true }]}>
-              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
-            <Form.Item name="internetPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Internet / tháng (VND)</span>} rules={[{ required: true }]}>
-              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
-            <Form.Item name="cleaningPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Phí vệ sinh / tháng (VND)</span>} rules={[{ required: true }]}>
-              <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-            </Form.Item>
+          <Form form={serviceForm} layout="vertical" onFinish={handleUpdateService} requiredMark={false} className="modal-form">
+            {serviceFormItems}
           </Form>
         </Modal>
       </div>
     );
   }
 
+  const openCreateRoom = () => {
+    roomForm.resetFields();
+    roomForm.setFieldsValue({ buildingId: selectedBuilding.id });
+    setRoomModalVisible(true);
+  };
+
+  const priceFormatter = (val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const priceParser = (val) => val.replace(/\$\s?|(,*)/g, '');
+
   // ─────────────────────────────────────────────────────────────────────────────
-  // VIEW 2: KHI BẤM VÀO 1 TÒA NHÀ -> HIỂN THỊ DANH SÁCH CÁC PHÒNG "THE ROOM MATRIX"
+  // VIEW 2: SƠ ĐỒ PHÒNG CỦA 1 TÒA NHÀ ("THE ROOM MATRIX")
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ paddingBottom: '40px' }}>
-      {/* HEADER CHI TIẾT TÒA NHÀ & NÚT QUAY LẠI */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <Button 
-            type="link" 
-            icon={<ArrowLeft size={16} />}
-            onClick={() => setSelectedBuilding(null)}
-            style={{ padding: 0, fontWeight: '700', color: '#6366f1', marginBottom: '8px', display: 'flex', alignItems: 'center' }}
-          >
+    <div className="page-shell">
+      <div className="page-header room-page-header">
+        <div className="page-header-main">
+          <Button type="link" className="back-link" icon={<ArrowLeft size={16} aria-hidden="true" />} onClick={() => setSelectedBuilding(null)}>
             Quay lại danh sách tòa nhà
           </Button>
-          <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#1a3353', margin: 0 }}>
-            {selectedBuilding.name}
-          </h1>
-          <div style={{ color: '#64748b', fontSize: '13px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <MapPin size={14} /> {selectedBuilding.address}
+          <h1 className="page-header-title">{selectedBuilding.name}</h1>
+          <div className="addr-line">
+            <MapPin size={14} aria-hidden="true" /> {selectedBuilding.address}
           </div>
         </div>
 
-        <Space size="middle">
-          <Button 
-            type="primary" 
-            icon={<Plus size={16} />} 
-            style={{ background: '#1a3353', border: 'none', height: '40px', borderRadius: '8px', fontWeight: 'bold' }}
-            onClick={() => {
-              roomForm.resetFields();
-              roomForm.setFieldsValue({ buildingId: selectedBuilding.id });
-              setRoomModalVisible(true);
-            }}
+        {/* Bộ lọc theo trạng thái, kiêm tổng quan số phòng */}
+        <div className="room-summary" role="group" aria-label="Lọc phòng theo trạng thái">
+          <button
+            type="button"
+            className={`summary-tile is-all${statusFilter === 'all' ? ' is-active' : ''}`}
+            aria-pressed={statusFilter === 'all'}
+            onClick={() => setStatusFilter('all')}
+            title={`Lấp đầy ${occupancyRate}%`}
           >
-            Thêm phòng mới
-          </Button>
+            <Home size={14} aria-hidden="true" />
+            <span className="summary-label">Tất cả</span>
+            <span className="summary-value">{totalRooms}</span>
+            <span className="summary-sub">· {occupancyRate}% lấp đầy</span>
+          </button>
+          {ROOM_STATUSES.map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              className={`summary-tile is-${key}${statusFilter === key ? ' is-active' : ''}`}
+              aria-pressed={statusFilter === key}
+              onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)}
+            >
+              <Icon size={14} aria-hidden="true" />
+              <span className="summary-label">{label}</span>
+              <span className="summary-value">{statusCounts[key] || 0}</span>
+            </button>
+          ))}
+        </div>
 
-          <Button 
-            type="dashed" 
-            icon={<Settings size={16} />} 
-            style={{ height: '40px', borderRadius: '8px', fontWeight: '600' }}
-            onClick={() => handleOpenServiceModal(selectedBuilding)}
-          >
+        <div className="page-header-actions">
+          <Button icon={<Settings size={16} aria-hidden="true" />} onClick={() => handleOpenServiceModal(selectedBuilding)}>
             Đơn giá dịch vụ
           </Button>
-        </Space>
+          <Button type="primary" icon={<Plus size={16} aria-hidden="true" />} onClick={openCreateRoom}>
+            Thêm phòng mới
+          </Button>
+        </div>
       </div>
 
-      {/* ─── THE ROOM MATRIX CARD ───────────────────────────────────────────────── */}
-      <Card 
-        bordered={false} 
-        style={{ 
-          borderRadius: '20px', 
-          boxShadow: '0 8px 30px rgba(0,0,0,0.04)',
-          background: '#ffffff',
-          padding: '12px'
-        }}
-        bodyStyle={{ padding: '24px' }}
-      >
-        {/* MATRIX HEADER & LEGEND */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '32px' }}>
+      <Card variant="borderless" className="stat-card">
+        <div className="matrix-head">
           <div>
-            <h2 style={{ fontSize: '30px', fontWeight: '900', color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>
-              The Room Matrix
-            </h2>
-            <div style={{ color: '#64748b', fontSize: '13.5px', fontWeight: '500', marginTop: '4px' }}>
-              Real-time occupancy and payment status overview
+            <h2 className="matrix-title">Sơ đồ phòng</h2>
+            <div className="matrix-sub">
+              {statusFilter === 'all'
+                ? 'Tình trạng thuê và thanh toán của từng phòng, sắp xếp theo tầng.'
+                : `Đang lọc: ${STATUS_BY_KEY[statusFilter]?.label || ''} (${visibleRooms.length} phòng)`}
             </div>
           </div>
-
-          {/* LEGEND PILLS */}
-          <div 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '16px', 
-              background: '#f8fafc', 
-              padding: '8px 16px', 
-              borderRadius: '30px', 
-              border: '1px solid #f1f5f9',
-              flexWrap: 'wrap'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }}></span>
-              Available
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3b82f6' }}></span>
-              Occupied
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }}></span>
-              Overdue
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#8b5cf6' }}></span>
-              Expiring
-            </div>
-          </div>
+          {statusFilter !== 'all' && (
+            <Button onClick={() => setStatusFilter('all')}>Bỏ lọc</Button>
+          )}
         </div>
 
-        {/* DANH SÁCH PHÒNG THEO TẦNG */}
-        {currentBuildingRooms.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '50px 0' }}>
+        {currentBuildingRooms.length > 0 && visibleRooms.length === 0 ? (
+          <div className="matrix-empty">
+            <Empty description="Không có phòng nào ở trạng thái này" />
+          </div>
+        ) : currentBuildingRooms.length === 0 ? (
+          <div className="matrix-empty">
             <Empty description="Tòa nhà này chưa có phòng trọ nào" />
-            <Button 
-              type="primary" 
-              style={{ marginTop: '16px', background: '#1a3353', borderRadius: '8px' }}
-              onClick={() => {
-                roomForm.resetFields();
-                roomForm.setFieldsValue({ buildingId: selectedBuilding.id });
-                setRoomModalVisible(true);
-              }}
-            >
-              + Thêm phòng đầu tiên
+            <Button type="primary" icon={<Plus size={16} aria-hidden="true" />} onClick={openCreateRoom}>
+              Thêm phòng đầu tiên
             </Button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '36px' }}>
+          <div className="floor-list">
             {sortedFloors.map(floorNum => {
               const floorRooms = groupedRoomsByFloor[floorNum] || [];
 
               return (
-                <div key={floorNum}>
-                  {/* TIÊU ĐỀ TẦNG */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
-                      Floor {floorNum}
-                    </h3>
-                    <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                <section key={floorNum} aria-label={`Tầng ${floorNum}`}>
+                  <div className="floor-head">
+                    <h3 className="floor-title">Tầng {floorNum}</h3>
+                    <span className="floor-count">{floorRooms.length} phòng</span>
+                    <div className="floor-line" aria-hidden="true" />
                   </div>
 
-                  {/* LƯỚI PHÒNG TRỌ TRONG TẦNG */}
-                  <Row gutter={[20, 20]}>
-                    {floorRooms.map(room => {
-                      const status = getRoomStatusDetails(room);
+                  <Row gutter={[16, 16]}>
+                    {floorRooms.map(({ room, status }) => {
+                      const { label, Icon } = STATUS_BY_KEY[status.key];
 
                       return (
-                        <Col xs={24} sm={12} md={12} lg={8} xl={6} key={room.id}>
-                          <div
-                            style={{
-                              borderRadius: '16px',
-                              background: status.bg,
-                              borderLeft: status.borderLeft,
-                              borderTop: '1px solid #f1f5f9',
-                              borderRight: '1px solid #f1f5f9',
-                              borderBottom: '1px solid #f1f5f9',
-                              padding: '18px',
-                              boxShadow: '0 4px 14px rgba(0,0,0,0.03)',
-                              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              justify: 'space-between',
-                              minHeight: '220px'
-                            }}
-                          >
-                            {/* HÀNG ĐẦU: SỐ PHÒNG, TRẠNG THÁI VÀ NÚT CHỈNH SỬA */}
+                        <Col xs={24} sm={12} lg={8} xl={6} key={room.id}>
+                          <div className={`room-card is-${status.key}`}>
                             <div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div className="room-top">
                                 <div>
-                                  <span style={{ fontSize: '22px', fontWeight: '900', color: '#0f172a', lineHeight: '1' }}>
-                                    Phòng {room.roomNumber}
+                                  <div className="room-number">Phòng {room.roomNumber}</div>
+                                  <span className="room-status">
+                                    <Icon size={12} aria-hidden="true" /> {label}
                                   </span>
-                                  <div style={{ fontSize: '10.5px', fontWeight: '800', color: status.color, letterSpacing: '0.6px', marginTop: '4px' }}>
-                                    {status.label}
-                                  </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  {status.icon}
+                                <div className="room-tools">
                                   <Tooltip title="Sửa thông tin phòng">
                                     <Button
                                       type="text"
                                       size="small"
-                                      icon={<Edit2 size={15} color="#64748b" />}
+                                      aria-label={`Sửa phòng ${room.roomNumber}`}
+                                      icon={<Edit2 size={15} color="#64748B" aria-hidden="true" />}
                                       onClick={() => handleOpenEditRoomModal(room)}
-                                      style={{ borderRadius: '6px' }}
                                     />
                                   </Tooltip>
                                 </div>
                               </div>
 
-                              {/* THÔNG TIN CHI TIẾT HIỂN THỊ TRỰC TIẾP: GIÁ, SỨC CHỨA, DIỆN TÍCH */}
-                              <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(255,255,255,0.7)', padding: '10px 12px', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span style={{ fontSize: '12px', color: '#64748b' }}>Giá thuê:</span>
-                                  <strong style={{ fontSize: '14px', color: '#0f172a' }}>{formatVND(room.price)}/tháng</strong>
+                              <div className="room-specs">
+                                <div className="room-spec">
+                                  <span className="room-spec-label">Giá thuê</span>
+                                  <span className="room-price">{formatVND(room.price)}<small>/tháng</small></span>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Users size={13} color="#64748b" /> Sức chứa:
-                                  </span>
-                                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>{room.capacity || 2} người</span>
+                                <div className="room-spec">
+                                  <span className="room-spec-label"><Users size={13} aria-hidden="true" /> Sức chứa</span>
+                                  <span>{room.capacity || 2} người</span>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Maximize2 size={13} color="#64748b" /> Diện tích:
-                                  </span>
-                                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>{room.area || 20} m²</span>
+                                <div className="room-spec">
+                                  <span className="room-spec-label"><Maximize2 size={13} aria-hidden="true" /> Diện tích</span>
+                                  <span>{room.area || 20} m²</span>
                                 </div>
                               </div>
 
-                              {status.subLabel && status.subLabel !== 'Ready to Lease' && (
-                                <div style={{ fontSize: '12px', color: '#475569', fontWeight: '600', marginTop: '8px' }}>
-                                  👤 {status.subLabel}
-                                </div>
-                              )}
+                              <div className="room-tenant">
+                                <User size={13} aria-hidden="true" />
+                                {status.tenantName || {
+                                  available: 'Sẵn sàng cho thuê',
+                                  reserved: 'Đang chờ khách ký hợp đồng',
+                                  maintenance: 'Đang tạm ngưng để bảo trì',
+                                }[status.key] || 'Chưa có thông tin khách thuê'}
+                              </div>
                             </div>
 
-                            {/* CÁC NÚT HÀNH ĐỘNG HỢP ĐỒNG & CHỐT SỐ ĐIỆN */}
-                            <div style={{ marginTop: '14px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                              {(status.key === 'available' || room.status === 'empty') && (
+                            <div className="room-actions">
+                              {status.key === 'available' && (
                                 <Button
                                   type="primary"
                                   size="small"
-                                  icon={<FileSignature size={14} />}
-                                  style={{ background: '#10b981', borderColor: '#10b981', borderRadius: '8px', fontWeight: '600', flex: 1 }}
+                                  className="btn-success"
+                                  icon={<FileSignature size={14} aria-hidden="true" />}
                                   onClick={() => navigate('/landlord/contracts', { state: { createForRoomId: room.id, buildingId: room.buildingId } })}
                                 >
                                   Tạo hợp đồng
                                 </Button>
                               )}
+                              {status.key === 'reserved' && (
+                                <Button
+                                  size="small"
+                                  icon={<FileSignature size={14} aria-hidden="true" />}
+                                  onClick={() => navigate('/landlord/contracts')}
+                                >
+                                  Xem hợp đồng
+                                </Button>
+                              )}
+                              {(status.key === 'expiring' || status.key === 'expired') && status.contractId && (
+                                <Button
+                                  type="primary"
+                                  size="small"
+                                  icon={<RotateCcw size={14} aria-hidden="true" />}
+                                  onClick={() => navigate('/landlord/contracts', { state: { renewContractId: status.contractId } })}
+                                >
+                                  Gia hạn
+                                </Button>
+                              )}
+                              {status.key !== 'available' && status.key !== 'reserved' && status.key !== 'maintenance' && (
                               <Button
-                                type="default"
                                 size="small"
-                                icon={<Zap size={14} color="#d97706" />}
-                                style={{ borderRadius: '8px', fontWeight: '600', flex: 1, borderColor: '#fde047', background: '#fefce8', color: '#854d0e' }}
+                                className="btn-meter"
+                                icon={<Zap size={14} color="#D97706" aria-hidden="true" />}
                                 onClick={() => navigate('/landlord/utilities', { state: { selectedRoomId: room.id, buildingId: room.buildingId } })}
                               >
                                 Chốt số điện
                               </Button>
+                              )}
                             </div>
                           </div>
                         </Col>
                       );
                     })}
                   </Row>
-                </div>
+                </section>
               );
             })}
           </div>
@@ -737,37 +704,37 @@ const BuildingManager = () => {
 
       {/* MODAL THÊM PHÒNG TRỌ MỚI */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><Home size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Thêm Phòng trọ mới</span>}
+        title={modalTitle(<Home size={18} aria-hidden="true" />, 'Thêm Phòng trọ mới')}
         open={roomModalVisible}
         onCancel={() => setRoomModalVisible(false)}
         footer={[
-          <Button key="cancel" onClick={() => setRoomModalVisible(false)} style={{ borderRadius: '8px' }}>Hủy</Button>,
-          <Button key="submit" type="primary" loading={submitLoading} style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }} onClick={() => roomForm.submit()}>Thêm phòng</Button>
+          <Button key="cancel" onClick={() => setRoomModalVisible(false)}>Hủy</Button>,
+          <Button key="submit" type="primary" loading={submitLoading} onClick={() => roomForm.submit()}>Thêm phòng</Button>
         ]}
         width={450}
         centered
       >
-        <Form form={roomForm} layout="vertical" onFinish={handleCreateRoom} requiredMark={false} style={{ marginTop: '16px' }}>
-          <Form.Item name="buildingId" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Tòa nhà</span>} rules={[{ required: true, message: 'Chọn tòa nhà!' }]}>
-            <Select placeholder="Chọn tòa nhà" style={{ borderRadius: '8px' }}>
+        <Form form={roomForm} layout="vertical" onFinish={handleCreateRoom} requiredMark={false} className="modal-form">
+          <Form.Item name="buildingId" label="Tòa nhà" rules={[{ required: true, message: 'Chọn tòa nhà!' }]}>
+            <Select placeholder="Chọn tòa nhà">
               {buildings.map(b => <Select.Option key={b.id} value={b.id}>{b.name}</Select.Option>)}
             </Select>
           </Form.Item>
-          <Form.Item name="roomNumber" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số phòng / Mã phòng</span>} rules={[{ required: true, message: 'Vui lòng nhập số phòng!' }]}>
-            <Input placeholder="Ví dụ: 101, 202, 301" style={{ borderRadius: '8px', padding: '8px 12px' }} />
+          <Form.Item name="roomNumber" label="Số phòng / Mã phòng" rules={[{ required: true, message: 'Vui lòng nhập số phòng!' }]}>
+            <Input placeholder="Ví dụ: 101, 202, 301" />
           </Form.Item>
-          <Form.Item name="price" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Giá thuê (VND/tháng)</span>} rules={[{ required: true, message: 'Vui lòng nhập giá thuê!' }]}>
-            <InputNumber min={0} formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={(val) => val.replace(/\$\s?|(,*)/g, '')} style={{ width: '100%', borderRadius: '8px' }} placeholder="3,500,000" />
+          <Form.Item name="price" label="Giá thuê (VND/tháng)" rules={[{ required: true, message: 'Vui lòng nhập giá thuê!' }]}>
+            <InputNumber min={0} formatter={priceFormatter} parser={priceParser} className="w-full" placeholder="3,500,000" />
           </Form.Item>
           <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="capacity" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Sức chứa (Người)</span>} rules={[{ required: true, message: 'Nhập sức chứa!' }]} initialValue={2}>
-                <InputNumber min={1} max={50} style={{ width: '100%', borderRadius: '8px' }} placeholder="2" />
+            <Col xs={24} sm={12}>
+              <Form.Item name="capacity" label="Sức chứa (Người)" rules={[{ required: true, message: 'Nhập sức chứa!' }]} initialValue={2}>
+                <InputNumber min={1} max={50} className="w-full" placeholder="2" />
               </Form.Item>
             </Col>
-            <Col span={12}>
-              <Form.Item name="area" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Diện tích (m²)</span>} rules={[{ required: true, message: 'Nhập diện tích!' }]} initialValue={20}>
-                <InputNumber min={1} style={{ width: '100%', borderRadius: '8px' }} placeholder="20" />
+            <Col xs={24} sm={12}>
+              <Form.Item name="area" label="Diện tích (m²)" rules={[{ required: true, message: 'Nhập diện tích!' }]} initialValue={20}>
+                <InputNumber min={1} className="w-full" placeholder="20" />
               </Form.Item>
             </Col>
           </Row>
@@ -776,7 +743,7 @@ const BuildingManager = () => {
 
       {/* MODAL SỬA PHÒNG TRỌ */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><Edit2 size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Quản lý phòng: {selectedRoom?.roomNumber}</span>}
+        title={modalTitle(<Edit2 size={18} aria-hidden="true" />, `Quản lý phòng: ${selectedRoom?.roomNumber || ''}`)}
         open={editRoomModalVisible}
         onCancel={() => setEditRoomModalVisible(false)}
         footer={[
@@ -791,38 +758,47 @@ const BuildingManager = () => {
               setEditRoomModalVisible(false);
             }}
           >
-            <Button danger style={{ borderRadius: '8px', float: 'left' }}>Xóa phòng</Button>
+            <Button danger className="footer-left">Xóa phòng</Button>
           </Popconfirm>,
-          <Button key="cancel" onClick={() => setEditRoomModalVisible(false)} style={{ borderRadius: '8px' }}>Hủy</Button>,
-          <Button key="submit" type="primary" loading={submitLoading} style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }} onClick={() => editRoomForm.submit()}>Cập nhật</Button>
+          <Button key="cancel" onClick={() => setEditRoomModalVisible(false)}>Hủy</Button>,
+          <Button key="submit" type="primary" loading={submitLoading} onClick={() => editRoomForm.submit()}>Cập nhật</Button>
         ]}
         width={450}
         centered
       >
-        <Form form={editRoomForm} layout="vertical" onFinish={handleUpdateRoom} requiredMark={false} style={{ marginTop: '16px' }}>
-          <Form.Item name="roomNumber" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Số phòng / Tên phòng</span>} rules={[{ required: true, message: 'Nhập số phòng!' }]}>
-            <Input style={{ borderRadius: '8px', padding: '8px 12px' }} />
+        <Form form={editRoomForm} layout="vertical" onFinish={handleUpdateRoom} requiredMark={false} className="modal-form">
+          <Form.Item name="roomNumber" label="Số phòng / Tên phòng" rules={[{ required: true, message: 'Nhập số phòng!' }]}>
+            <Input />
           </Form.Item>
-          <Form.Item name="price" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Giá thuê phòng (VND)</span>} rules={[{ required: true, message: 'Nhập giá phòng!' }]}>
-            <InputNumber min={0} formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={(val) => val.replace(/\$\s?|(,*)/g, '')} style={{ width: '100%', borderRadius: '8px' }} />
+          <Form.Item name="price" label="Giá thuê phòng (VND)" rules={[{ required: true, message: 'Nhập giá phòng!' }]}>
+            <InputNumber min={0} formatter={priceFormatter} parser={priceParser} className="w-full" />
           </Form.Item>
           <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="capacity" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Sức chứa (Người)</span>} rules={[{ required: true, message: 'Nhập sức chứa!' }]}>
-                <InputNumber min={1} max={50} style={{ width: '100%', borderRadius: '8px' }} />
+            <Col xs={24} sm={12}>
+              <Form.Item name="capacity" label="Sức chứa (Người)" rules={[{ required: true, message: 'Nhập sức chứa!' }]}>
+                <InputNumber min={1} max={50} className="w-full" />
               </Form.Item>
             </Col>
-            <Col span={12}>
-              <Form.Item name="area" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Diện tích (m²)</span>} rules={[{ required: true, message: 'Nhập diện tích!' }]}>
-                <InputNumber min={1} style={{ width: '100%', borderRadius: '8px' }} />
+            <Col xs={24} sm={12}>
+              <Form.Item name="area" label="Diện tích (m²)" rules={[{ required: true, message: 'Nhập diện tích!' }]}>
+                <InputNumber min={1} className="w-full" />
               </Form.Item>
             </Col>
           </Row>
 
+          {!isRoomOccupiedOrReserved(selectedRoom) && (
+            <Form.Item name="status" label="Trạng thái phòng">
+              <Select>
+                <Select.Option value="empty">Còn trống</Select.Option>
+                <Select.Option value="maintenance">Đang bảo trì</Select.Option>
+              </Select>
+            </Form.Item>
+          )}
+
           {selectedRoom?.contracts && selectedRoom.contracts.length > 0 && (
-            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', marginTop: '12px', border: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>KHÁCH THUÊ ĐANG Ở</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', marginTop: '4px' }}>
+            <div className="tenant-box">
+              <div className="tenant-box-label">Khách thuê đang ở</div>
+              <div className="tenant-box-value">
                 {selectedRoom.contracts[0]?.tenant?.name} ({selectedRoom.contracts[0]?.tenant?.phone})
               </div>
             </div>
@@ -832,29 +808,18 @@ const BuildingManager = () => {
 
       {/* MODAL CẤU HÌNH DỊCH VỤ CHUNG CỦA TÒA NHÀ */}
       <Modal
-        title={<span style={{ fontWeight: '800', fontSize: '18px', color: '#1a3353' }}><Building size={18} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Cấu hình dịch vụ: {selectedBuilding?.name}</span>}
+        title={modalTitle(<Building size={18} aria-hidden="true" />, `Cấu hình dịch vụ: ${serviceBuilding?.name || ''}`)}
         open={serviceModalVisible}
         onCancel={() => setServiceModalVisible(false)}
         footer={[
-          <Button key="cancel" onClick={() => setServiceModalVisible(false)} style={{ borderRadius: '8px' }}>Hủy</Button>,
-          <Button key="submit" type="primary" loading={submitLoading} style={{ background: '#1a3353', border: 'none', borderRadius: '8px' }} onClick={() => serviceForm.submit()}>Lưu đơn giá</Button>
+          <Button key="cancel" onClick={() => setServiceModalVisible(false)}>Hủy</Button>,
+          <Button key="submit" type="primary" loading={submitLoading} onClick={() => serviceForm.submit()}>Lưu đơn giá</Button>
         ]}
         width={450}
         centered
       >
-        <Form form={serviceForm} layout="vertical" onFinish={handleUpdateService} requiredMark={false} style={{ marginTop: '16px' }}>
-          <Form.Item name="electricityPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Đơn giá Điện (VND/kWh)</span>} rules={[{ required: true }]}>
-            <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-          </Form.Item>
-          <Form.Item name="waterPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Đơn giá Nước (VND/m³)</span>} rules={[{ required: true }]}>
-            <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-          </Form.Item>
-          <Form.Item name="internetPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Internet / tháng (VND)</span>} rules={[{ required: true }]}>
-            <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-          </Form.Item>
-          <Form.Item name="cleaningPrice" label={<span style={{ fontWeight: '600', fontSize: '13px' }}>Phí vệ sinh / tháng (VND)</span>} rules={[{ required: true }]}>
-            <InputNumber min={0} style={{ width: '100%', borderRadius: '8px' }} />
-          </Form.Item>
+        <Form form={serviceForm} layout="vertical" onFinish={handleUpdateService} requiredMark={false} className="modal-form">
+          {serviceFormItems}
         </Form>
       </Modal>
     </div>
