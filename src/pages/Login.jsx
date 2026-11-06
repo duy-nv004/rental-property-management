@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Form, Input, Button, message, Modal } from 'antd';
 import { Mail, Lock, ArrowRight, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,18 @@ const Login = () => {
   const navigate = useNavigate();
   const [appealModalVisible, setAppealModalVisible] = useState(false);
   const [appealLoading, setAppealLoading] = useState(false);
+
+  useEffect(() => {
+    const flash = sessionStorage.getItem('auth_flash_message');
+    if (flash) {
+      sessionStorage.removeItem('auth_flash_message');
+      message.warning({
+        content: flash,
+        duration: 6,
+        key: 'auth_flash_notice'
+      });
+    }
+  }, []);
 
   const onAppealFinish = async (values) => {
     setAppealLoading(true);
@@ -42,9 +54,9 @@ const Login = () => {
       });
 
       // Kiểm tra xem API trả về token và thông tin thành công hay không
-      if (response && response.token) {
+      if (response && (response.accessToken || response.token)) {
         // Lưu trữ thông tin đăng nhập vào localStorage
-        localStorage.setItem('accessToken', response.token);
+        localStorage.setItem('accessToken', response.accessToken || response.token);
         localStorage.setItem('role', response.role);
         localStorage.setItem('username', response.name || 'Người dùng');
         localStorage.setItem('user', JSON.stringify({

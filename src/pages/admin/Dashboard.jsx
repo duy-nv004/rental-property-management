@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Progress, Spin, Empty, message } from 'antd';
 import { Users, Wallet, CheckCircle2, TrendingUp, Activity } from 'lucide-react';
 import PropTypes from 'prop-types';
@@ -81,24 +81,40 @@ ActivityItem.propTypes = {
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
-  const [refreshLoading, setRefreshLoading] = useState(false);
 
-  const fetchStats = async (isRefresh = false) => {
-    if (isRefresh) setRefreshLoading(true);
-    else setLoading(true);
+  const fetchStats = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const res = await axiosInstance.get('/admin/stats');
       setData(res);
     } catch (err) {
       console.error(err);
-      message.error('Lỗi khi tải dữ liệu thống kê quản trị!');
+      if (!isSilent) message.error('Lỗi khi tải dữ liệu thống kê quản trị!');
     } finally {
-      setLoading(false);
-      setRefreshLoading(false);
+      if (!isSilent) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchStats(); }, []);
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(() => {
+      fetchStats(true);
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchStats(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [fetchStats]);
 
   if (loading || !data) {
     return (
@@ -143,8 +159,6 @@ const Dashboard = () => {
       <PageHeader
         title="Tổng quan hệ thống"
         description="Số liệu giám sát các gói cước và chủ nhà trong hệ thống."
-        onRefresh={() => fetchStats(true)}
-        refreshLoading={refreshLoading}
       />
 
       <Row gutter={[20, 20]}>

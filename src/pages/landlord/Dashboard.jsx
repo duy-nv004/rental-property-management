@@ -252,7 +252,6 @@ const LandlordDashboard = () => {
           scroll={{ x: 760 }}
           locale={{ emptyText: 'Chưa có báo cáo sự cố nào' }}
           columns={[
-            { title: 'Mã', dataIndex: 'key', width: 80, render: (val) => <b>#{val}</b> },
             { title: 'Thời gian', dataIndex: 'time', width: 160, render: (t) => <span style={{ color: '#475569' }}>{t}</span> },
             { title: 'Phòng', dataIndex: 'roomNumber', width: 100, render: (room) => <Tag color="cyan">P.{room}</Tag> },
             { title: 'Mô tả', dataIndex: 'desc', ellipsis: true },

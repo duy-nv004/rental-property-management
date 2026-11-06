@@ -49,20 +49,13 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/landlord/support');
 });
 
-test('T3.1: hàng thống kê đếm đúng theo trạng thái', async ({ page }) => {
-  const stats = page.getByTestId('support-stats');
-  await expect(stats.getByTestId('stat-pending')).toContainText('2');
-  await expect(stats.getByTestId('stat-high-open')).toContainText('1');
-  await expect(stats.getByTestId('stat-resolved')).toContainText('1');
-});
-
-test('T3.1: mặc định chờ xử lý + nghiêm trọng lên đầu, có cột Khách báo', async ({ page }) => {
+test('T3.1: mặc định chờ xử lý + nghiêm trọng lên đầu, có thông tin Người báo', async ({ page }) => {
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toContainText('Ổ điện cháy');
   await expect(rows.nth(1)).toContainText('Vòi nước rò');
   await expect(rows.nth(2)).toContainText('Bóng đèn hỏng');
-  await expect(page.getByRole('columnheader', { name: 'Khách báo' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: /Người báo|Phòng/ })).toBeVisible();
   await expect(rows.nth(0)).toContainText('Nguyễn Văn An');
   await expect(rows.nth(0)).toContainText('0901234567');
 });
@@ -83,10 +76,8 @@ test('T3.1: tìm theo tên không dấu và lọc theo tòa nhà', async ({ page
 
 test('T3.1: lọc cột trạng thái chỉ còn sự cố đã khắc phục', async ({ page }) => {
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
-  await page.getByRole('columnheader', { name: /Trạng thái/ }).locator('.ant-table-filter-trigger').click();
-  const dropdown = page.locator('.ant-table-filter-dropdown');
-  await dropdown.getByText('Đã khắc phục').click();
-  await dropdown.getByRole('button', { name: /OK|Đồng ý/ }).click();
+  await page.getByTestId('support-status-filter').click();
+  await page.locator('.ant-select-item-option', { hasText: 'Đã khắc phục' }).click();
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('Bóng đèn hỏng');
 });

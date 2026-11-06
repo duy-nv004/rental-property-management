@@ -3,6 +3,7 @@ import { Avatar, Space, Badge, Popover } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { Bell, LogOut, Building, Menu as MenuIcon } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
+import { performLogout } from '../../utils/authSession';
 
 const getLandlordNotificationRoute = (notification) => {
   const type = String(notification?.type || '').toLowerCase();
@@ -152,7 +153,7 @@ const LandlordHeader = ({ onMenuClick }) => {
             <div style={{ background: '#0f172a', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}>
               <Building size={16} color="#38bdf8" />
             </div>
-            <span style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a', letterSpacing: '0.5px' }}>EXECUTIVE LENS</span>
+            <span style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a', letterSpacing: '0.5px' }}>HOMESYNC</span>
           </div>
         </div>
       ) : (
@@ -188,10 +189,7 @@ const LandlordHeader = ({ onMenuClick }) => {
             size={20} 
             color="#ef4444" 
             style={{ cursor: 'pointer', marginLeft: '4px' }} 
-            onClick={() => {
-              localStorage.clear();
-              navigate('/login');
-            }}
+            onClick={() => performLogout(axiosInstance, navigate)}
           />
         )}
       </Space>

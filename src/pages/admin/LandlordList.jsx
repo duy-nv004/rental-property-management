@@ -73,21 +73,38 @@ const LandlordList = () => {
   const [statusForm] = Form.useForm();
   const isPhone = !Grid.useBreakpoint().md;
 
-  const fetchLandlords = useCallback(async () => {
-    setLoading(true);
+  const fetchLandlords = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const res = await axiosInstance.get('/admin/landlords');
       setLandlords(Array.isArray(res) ? res : []);
     } catch (err) {
       console.error(err);
-      message.error('Lỗi hệ thống khi tải danh sách chủ nhà!');
+      if (!isSilent) message.error('Lỗi hệ thống khi tải danh sách chủ nhà!');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchLandlords();
+    const interval = setInterval(() => {
+      fetchLandlords(true);
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLandlords(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, [fetchLandlords]);
 
   const confirmPlanChange = (record, newPlan) => {
@@ -314,8 +331,6 @@ const LandlordList = () => {
       <PageHeader
         title="Danh sách chủ nhà"
         description="Giám sát đối tác vận hành và quản lý gói cước của từng chủ nhà."
-        onRefresh={fetchLandlords}
-        refreshLoading={loading}
       />
 
       <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>

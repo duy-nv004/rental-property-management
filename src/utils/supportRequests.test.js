@@ -87,6 +87,18 @@ describe('filterSupportRequests', () => {
     assert.deepEqual(filterSupportRequests(list, { buildingId: 8 }).map(x => x.id), [2]);
   });
 
+  test('lọc theo trạng thái, mức độ và loại sự cố', () => {
+    assert.deepEqual(filterSupportRequests(list, { status: 'pending' }).map(x => x.id), [1, 2]);
+    assert.deepEqual(filterSupportRequests(list, { severity: 'high' }).map(x => x.id), [1]);
+    assert.deepEqual(filterSupportRequests(list, { severity: 'low' }).map(x => x.id), [2]);
+    const listWithCat = [
+      r(1, 'pending', 'high', 'x', { category: 'electric' }),
+      r(2, 'resolved', 'low', 'x', { category: 'water' })
+    ];
+    assert.deepEqual(filterSupportRequests(listWithCat, { category: 'electric' }).map(x => x.id), [1]);
+    assert.deepEqual(filterSupportRequests(listWithCat, { status: 'resolved' }).map(x => x.id), [2]);
+  });
+
   test('bản ghi thiếu tenant/room không làm lỗi', () => {
     assert.deepEqual(filterSupportRequests([r(3, 'pending', 'low', 'x')], { search: 'abc' }), []);
   });

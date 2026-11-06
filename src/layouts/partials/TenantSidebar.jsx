@@ -10,5 +10,5 @@ export const tenantNavItems = [
   { key: '/tenant/profile', icon: <User size={18} />, label: 'Cá nhân' },
 ];
 
-const TenantSidebar = () => <SidebarNav subtitle="Người thuê" items={tenantNavItems} />;
+const TenantSidebar = ({ onClose }) => <SidebarNav subtitle="Phòng trọ của tôi" items={tenantNavItems} onNavigate={onClose} />;
 export default TenantSidebar;

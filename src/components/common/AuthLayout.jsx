@@ -13,8 +13,8 @@ const AuthLayout = ({ heading, description, title, subtitle, children }) => (
       <div className="auth-brand">
         <div className="app-brand-mark"><Building2 size={18} aria-hidden="true" /></div>
         <div>
-          <div className="auth-brand-name">Executive Lens</div>
-          <div className="auth-brand-sub">Property Management</div>
+          <div className="auth-brand-name">HomeSync</div>
+          <div className="auth-brand-sub">Hệ thống quản lý phòng trọ</div>
         </div>
       </div>
 
@@ -29,7 +29,7 @@ const AuthLayout = ({ heading, description, title, subtitle, children }) => (
       </div>
 
       <div className="auth-footer">
-        <span>© 2026 Executive Lens</span>
+        <span>© 2026 HomeSync</span>
         <span>Điều khoản · Bảo mật</span>
       </div>
     </aside>
@@ -38,7 +38,7 @@ const AuthLayout = ({ heading, description, title, subtitle, children }) => (
       <div className="auth-form-box">
         <div className="auth-mobile-brand">
           <div className="app-brand-mark"><Building2 size={18} aria-hidden="true" /></div>
-          <span className="app-brand-name">Executive Lens</span>
+          <span className="app-brand-name">HomeSync</span>
         </div>
         <h2 className="auth-title">{title}</h2>
         <p className="auth-subtitle">{subtitle}</p>

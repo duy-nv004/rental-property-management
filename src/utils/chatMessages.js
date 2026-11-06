@@ -16,7 +16,7 @@ export const MAX_MESSAGE_LENGTH = 1000;
 const WELCOME_BY_ROLE = {
   tenant: 'Xin chào! Tôi có thể giúp bạn tra cứu phòng đang thuê, hóa đơn và hợp đồng của bạn.',
   landlord: 'Xin chào! Tôi có thể giúp bạn xem tình hình tòa nhà, phòng trống và doanh thu.',
-  admin: 'Xin chào! Tôi có thể hướng dẫn bạn cách sử dụng các tính năng quản trị hệ thống.',
+  admin: 'Xin chào Quản trị viên! Tôi có thể hỗ trợ bạn theo dõi chỉ số hệ thống, rà soát giao dịch và giải quyết khiếu nại.',
 };
 
 /**
@@ -62,14 +62,22 @@ export function welcomeMessage(role) {
   return WELCOME_BY_ROLE[key] || WELCOME_BY_ROLE.admin;
 }
 
-// Gợi ý mở đầu — mỗi vai trò chỉ hỏi được về dữ liệu của chính mình (admin hỏi hướng dẫn sử dụng hệ thống)
+// Gợi ý mở đầu — mỗi vai trò có câu gợi ý khám phá năng lực và các nghiệp vụ chính
 const SUGGESTIONS_BY_ROLE = {
-  tenant: ['Hóa đơn nào tôi chưa thanh toán?', 'Hợp đồng của tôi khi nào hết hạn?', 'Yêu cầu hỗ trợ của tôi đang xử lý chưa?'],
-  landlord: ['Tòa nhà của tôi còn bao nhiêu phòng trống?', 'Doanh thu tháng này thế nào?', 'Có yêu cầu hỗ trợ nào chưa xử lý?'],
+  tenant: [
+    '👉 Bạn có thể làm được những gì?',
+    'Hóa đơn nào tôi chưa thanh toán?',
+    'Hợp đồng của tôi khi nào hết hạn?',
+  ],
+  landlord: [
+    '👉 Bạn có thể làm được những gì?',
+    'Tòa nhà của tôi còn bao nhiêu phòng trống?',
+    'Doanh thu tháng này thế nào?',
+  ],
   admin: [
-    'Hướng dẫn cách duyệt yêu cầu nâng cấp gói dịch vụ?',
-    'Làm sao để khóa hoặc mở khóa tài khoản chủ nhà?',
-    'Cách xử lý phiếu hỗ trợ trong trang Quản trị?',
+    '👉 Bạn có thể hỗ trợ những tác vụ gì?',
+    'Doanh thu nền tảng tháng này thế nào?',
+    'Có giao dịch SePay nào bị lỗi gần đây không?',
   ],
 };
 
@@ -95,6 +103,14 @@ const ACTION_LABELS = {
   terminate_contract: { title: 'Thanh lý hợp đồng' },
   update_support_status: { title: 'Cập nhật trạng thái sửa chữa' },
   create_support_request: { title: 'Gửi báo sự cố' },
+  request_move_out: { title: 'Yêu cầu trả phòng' },
+  request_renewal: { title: 'Đề nghị gia hạn hợp đồng' },
+  add_roommate: { title: 'Thêm người ở cùng phòng' },
+  renew_contract_quick: { title: 'Gia hạn hợp đồng' },
+  send_overdue_reminders: { title: 'Gửi nhắc nợ hàng loạt' },
+  get_revenue_stats: { title: 'Thống kê doanh thu' },
+  resolve_landlord_ticket: { title: 'Xử lý khiếu nại tài khoản' },
+  update_landlord_status: { title: 'Khóa / Mở khóa tài khoản' },
 };
 
 /** Tiêu đề thẻ xác nhận theo tool. Tool lạ -> null (không hiện thẻ). */
@@ -173,6 +189,49 @@ export function formatActionSummary(tool, params = {}) {
       if (has('severity')) push('Mức độ', sev[params.severity] || params.severity);
       return rows;
     }
+    case 'request_move_out':
+      if (has('contractId')) push('ID hợp đồng', String(params.contractId));
+      if (has('desiredDate')) push('Ngày trả phòng mong muốn', String(params.desiredDate));
+      if (has('note')) push('Lý do / Ghi chú', String(params.note));
+      return rows;
+    case 'request_renewal':
+      if (has('contractId')) push('ID hợp đồng', String(params.contractId));
+      if (has('desiredDate')) push('Ngày kết thúc mới', String(params.desiredDate));
+      if (has('note')) push('Ghi chú', String(params.note));
+      return rows;
+    case 'add_roommate':
+      if (has('contractId')) push('ID hợp đồng', String(params.contractId));
+      if (has('fullName')) push('Họ và tên người ở cùng', String(params.fullName));
+      if (has('phone')) push('Số điện thoại', String(params.phone));
+      if (has('relation')) push('Quan hệ', String(params.relation));
+      if (has('note')) push('Ghi chú', String(params.note));
+      return rows;
+    case 'renew_contract_quick':
+      if (has('contractId')) push('ID hợp đồng', String(params.contractId));
+      if (has('startDate')) push('Ngày bắt đầu gia hạn', String(params.startDate));
+      if (has('endDate')) push('Ngày kết thúc gia hạn', String(params.endDate));
+      if (has('rentPrice')) push('Giá thuê mới', `${formatVND(params.rentPrice)} VND/tháng`);
+      return rows;
+    case 'send_overdue_reminders':
+      if (has('buildingId')) push('Tòa nhà (ID)', String(params.buildingId));
+      return rows;
+    case 'get_revenue_stats': {
+      const year = params.year || new Date().getFullYear();
+      const monthRaw = params.month != null && String(params.month).trim() !== '' ? String(params.month).trim() : 'all';
+      const periodLabel = monthRaw === 'all' || monthRaw === 'cả năm' ? `Cả năm ${year}` : `Tháng ${monthRaw}/${year}`;
+      push('Kỳ thống kê', periodLabel);
+      return rows;
+    }
+    case 'resolve_landlord_ticket':
+      if (has('ticketId')) push('ID khiếu nại', String(params.ticketId));
+      if (has('status')) push('Trạng thái xử lý', params.status === 'resolved' ? 'Duyệt mở khóa' : 'Từ chối khiếu nại');
+      if (has('adminResponse')) push('Phản hồi', String(params.adminResponse));
+      return rows;
+    case 'update_landlord_status':
+      if (has('landlordId')) push('ID chủ nhà', String(params.landlordId));
+      if (has('status')) push('Trạng thái mới', params.status === 'locked' ? 'Khóa tài khoản' : 'Mở khóa tài khoản');
+      if (has('lockReason')) push('Lý do khóa', String(params.lockReason));
+      return rows;
     default:
       return rows;
   }

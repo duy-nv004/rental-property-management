@@ -13,5 +13,5 @@ const items = [
   { key: '/landlord/plans', icon: <Package size={18} />, label: 'Gói dịch vụ' },
 ];
 
-const LandlordSidebar = ({ onClose }) => <SidebarNav subtitle="Chủ nhà" items={items} onNavigate={onClose} />;
+const LandlordSidebar = ({ onClose }) => <SidebarNav subtitle="Quản lý phòng trọ" items={items} onNavigate={onClose} />;
 export default LandlordSidebar;

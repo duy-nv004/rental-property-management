@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Table, Tag, Card, Button, Space, message, Modal, Form, Input, InputNumber, Image, Select, Statistic } from 'antd';
-import { Wrench, CheckCircle2, Play } from 'lucide-react';
+import { Table, Tag, Card, Button, Space, message, Modal, Form, Input, InputNumber, Image, Select, Grid, Tooltip } from 'antd';
+import { Wrench, CheckCircle2, Play, User } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
-import { sortSupportRequests, supportStats, filterSupportRequests } from '../../utils/supportRequests';
+import { sortSupportRequests, filterSupportRequests } from '../../utils/supportRequests';
 import PageHeader from '../../components/admin/PageHeader';
 import { CATEGORY_LABELS } from '../tenant/Support';
 import SupportImage from '../../components/common/SupportImage';
@@ -33,8 +33,11 @@ const SupportManager = () => {
   const [resolveForm] = Form.useForm();
   const [search, setSearch] = useState('');
   const [buildingId, setBuildingId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(null);
+  const [severityFilter, setSeverityFilter] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState(null);
+  const isPhone = !Grid.useBreakpoint().md;
 
-  const stats = useMemo(() => supportStats(requests), [requests]);
   const buildingOptions = useMemo(() => {
     const seen = new Map();
     for (const r of Array.isArray(requests) ? requests : []) {
@@ -44,30 +47,48 @@ const SupportManager = () => {
     return [...seen].map(([value, label]) => ({ value, label }));
   }, [requests]);
   const visibleRequests = useMemo(
-    () => sortSupportRequests(filterSupportRequests(requests, { search, buildingId })),
-    [requests, search, buildingId],
+    () => sortSupportRequests(filterSupportRequests(requests, {
+      search,
+      buildingId,
+      status: statusFilter,
+      severity: severityFilter,
+      category: categoryFilter,
+    })),
+    [requests, search, buildingId, statusFilter, severityFilter, categoryFilter],
   );
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
+  const fetchRequests = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const data = await axiosInstance.get('/manage/support-requests');
       setRequests(Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []));
     } catch (err) {
       console.error('Error fetching support requests:', err);
-      message.error('Không thể tải danh sách báo cáo sự cố.');
+      if (!isSilent) message.error('Không thể tải danh sách báo cáo sự cố.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchRequests();
+    // Tự động kiểm tra và cập nhật ngầm mỗi 10 giây khi có báo cáo mới từ khách thuê
+    const timer = setInterval(() => fetchRequests(true), 10000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchRequests(true);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onVisibilityChange);
+    };
   }, [fetchRequests]);
 
   // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
   useEffect(() => {
-    const onChanged = () => { fetchRequests(); };
+    const onChanged = () => { fetchRequests(true); };
     window.addEventListener('app:data-changed', onChanged);
     return () => window.removeEventListener('app:data-changed', onChanged);
   }, [fetchRequests]);
@@ -88,62 +109,52 @@ const SupportManager = () => {
   };
 
   const columns = [
-    { title: 'Mã', dataIndex: 'id', key: 'id', width: 80, render: (text) => <b>#{text}</b> },
     {
-      title: 'Phòng trọ',
+      title: 'Phòng & Người báo',
       dataIndex: ['room', 'roomNumber'],
       key: 'roomNumber',
-      width: 160,
+      width: 170,
       render: (text, record) => (
         <div>
-          <div style={{ fontWeight: 600, color: '#0F172A' }}>Phòng {text}</div>
-          <div style={{ fontSize: 12, color: '#64748B' }}>{record.room?.building?.name}</div>
-        </div>
-      )
-    },
-    {
-      title: 'Khách báo',
-      key: 'tenant',
-      width: 160,
-      render: (_, record) => record.tenant ? (
-        <div>
-          <div style={{ fontWeight: 600, color: '#0F172A' }}>{record.tenant.name}</div>
-          {record.tenant.phone && <div style={{ fontSize: 12, color: '#64748B' }}>{record.tenant.phone}</div>}
-        </div>
-      ) : <span style={{ color: '#94A3B8' }}>—</span>
-    },
-    {
-      title: 'Loại',
-      dataIndex: 'category',
-      key: 'category',
-      width: 110,
-      filters: Object.entries(CATEGORY_LABELS).map(([value, text]) => ({ text, value })),
-      onFilter: (value, record) => (record.category || 'other') === value,
-      render: (cat) => <Tag>{CATEGORY_LABELS[cat] || 'Khác'}</Tag>
-    },
-    {
-      title: 'Mô tả sự cố',
-      dataIndex: 'description',
-      key: 'description',
-      render: (text, record) => (
-        <div>
-          <div>{text}</div>
-          {record.landlordNote && <div style={{ fontSize: 12, color: '#64748B' }}>Ghi chú: {record.landlordNote}</div>}
-          {record.repairCost != null && (
-            <div style={{ fontSize: 12, color: '#64748B' }}>Chi phí: {Number(record.repairCost).toLocaleString('vi-VN')} đ</div>
+          <div style={{ fontWeight: 600, color: '#0F172A' }}>
+            Phòng {text} <span style={{ fontWeight: 400, color: '#64748B', fontSize: 12 }}>· {record.room?.building?.name}</span>
+          </div>
+          {record.tenant ? (
+            <div style={{ fontSize: 12, color: '#0F766E', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <User size={12} aria-hidden="true" />
+              <span>{record.tenant.name}</span>
+              {record.tenant.phone && <span style={{ color: '#64748B' }}>({record.tenant.phone})</span>}
+            </div>
+          ) : (
+            <span style={{ fontSize: 12, color: '#94A3B8' }}>Chưa gán khách</span>
           )}
         </div>
       )
     },
     {
+      title: 'Loại',
+      dataIndex: 'category',
+      key: 'category',
+      width: 95,
+      render: (cat) => <Tag style={{ margin: 0 }}>{CATEGORY_LABELS[cat] || 'Khác'}</Tag>
+    },
+    {
+      title: 'Nội dung',
+      dataIndex: 'description',
+      key: 'description',
+      width: 250,
+      render: (text) => <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{text}</div>
+    },
+    {
       title: 'Ảnh',
       dataIndex: 'images',
       key: 'images',
-      width: 150,
+      width: 90,
       render: (images, record) => images?.length ? (
         <Image.PreviewGroup>
-          <Space size={4}>
-            {images.map((src) => <SupportImage key={src} requestId={record.id} path={src} width={48} />)}
+          <Space size={4} wrap>
+            {images.slice(0, 2).map((src) => <SupportImage key={src} requestId={record.id} path={src} width={36} />)}
+            {images.length > 2 && <Tag style={{ margin: 0, padding: '0 4px', fontSize: 11 }}>+{images.length - 2}</Tag>}
           </Space>
         </Image.PreviewGroup>
       ) : <span style={{ color: '#94A3B8' }}>—</span>
@@ -152,70 +163,73 @@ const SupportManager = () => {
       title: 'Mức độ',
       dataIndex: 'severity',
       key: 'severity',
-      width: 130,
-      filters: Object.entries(SEVERITY_TAGS).map(([value, cfg]) => ({ text: cfg.text, value })),
-      onFilter: (value, record) => record.severity === value,
-      sorter: (a, b) => (SEVERITY_ORDER[a.severity] || 0) - (SEVERITY_ORDER[b.severity] || 0),
+      width: 105,
       render: (sev) => {
         const cfg = SEVERITY_TAGS[sev];
-        return cfg ? <Tag color={cfg.color}>{cfg.text}</Tag> : <Tag>{sev}</Tag>;
+        return cfg ? <Tag color={cfg.color} style={{ margin: 0 }}>{cfg.text}</Tag> : <Tag style={{ margin: 0 }}>{sev}</Tag>;
       }
     },
     {
-      title: 'Thời gian báo',
+      title: 'Thời gian',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 160,
-      sorter: (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
+      width: 110,
       render: (date) => (
-        <span style={{ fontSize: 13, color: '#475569' }}>
-          {new Date(date).toLocaleDateString('vi-VN')} {new Date(date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-        </span>
+        <div style={{ fontSize: 12, lineHeight: 1.3 }}>
+          <div style={{ color: '#0F172A', fontWeight: 500 }}>{new Date(date).toLocaleDateString('vi-VN')}</div>
+          <div style={{ color: '#94A3B8', fontSize: 11 }}>{new Date(date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
+        </div>
       )
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
-      width: 140,
-      filters: Object.entries(STATUS_TAGS).map(([value, cfg]) => ({ text: cfg.text, value })),
-      onFilter: (value, record) => record.status === value,
+      width: 110,
       render: (status) => {
         const cfg = STATUS_TAGS[status];
-        return cfg ? <Tag color={cfg.color}>{cfg.text}</Tag> : <Tag>{status}</Tag>;
+        return cfg ? <Tag color={cfg.color} style={{ margin: 0 }}>{cfg.text}</Tag> : <Tag style={{ margin: 0 }}>{status}</Tag>;
       }
     },
     {
       title: 'Xử lý',
       key: 'action',
-      width: 150,
+      width: 100,
+      fixed: 'right',
       render: (_, record) => (
-        <Space size={8} wrap>
+        <Space size={4}>
           {record.status === 'pending' && (
-            <Button
-              type="primary"
-              size="small"
-              loading={actionId === record.id}
-              icon={<Play size={14} />}
-              onClick={() => handleUpdateStatus(record.id, 'in_progress')}
-            >
-              Bắt đầu sửa
-            </Button>
+            <Tooltip title="Bắt đầu sửa chữa">
+              <Button
+                type="primary"
+                size="small"
+                loading={actionId === record.id}
+                icon={<Play size={14} />}
+                onClick={() => handleUpdateStatus(record.id, 'in_progress')}
+                aria-label="Bắt đầu sửa chữa"
+              >
+                Sửa
+              </Button>
+            </Tooltip>
           )}
           {record.status === 'in_progress' && (
-            <Button
-              type="primary"
-              size="small"
-              loading={actionId === record.id}
-              icon={<CheckCircle2 size={14} />}
-              onClick={() => { resolveForm.resetFields(); setResolving(record); }}
-            >
-              Hoàn thành
-            </Button>
+            <Tooltip title="Xác nhận hoàn thành sửa chữa">
+              <Button
+                type="primary"
+                size="small"
+                style={{ background: '#10B981', borderColor: '#10B981' }}
+                loading={actionId === record.id}
+                icon={<CheckCircle2 size={14} />}
+                onClick={() => { resolveForm.resetFields(); setResolving(record); }}
+                aria-label="Hoàn thành sửa chữa"
+              >
+                Xong
+              </Button>
+            </Tooltip>
           )}
           {record.status === 'resolved' && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#15803D', fontSize: 13, fontWeight: 600 }}>
-              <CheckCircle2 size={14} aria-hidden="true" /> Đã xong
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#15803D', fontSize: 12, fontWeight: 600 }}>
+              <CheckCircle2 size={14} aria-hidden="true" /> Xong
             </span>
           )}
         </Space>
@@ -228,41 +242,55 @@ const SupportManager = () => {
       <PageHeader
         title="Xử lý sự cố báo hỏng"
         description="Theo dõi và cập nhật tiến độ khắc phục báo hỏng từ khách thuê."
-        onRefresh={fetchRequests}
-        refreshLoading={loading}
       />
 
-      <div data-testid="support-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
-        <Card size="small" data-testid="stat-pending"><Statistic title="Chờ xử lý" value={stats.pending} /></Card>
-        <Card size="small" data-testid="stat-in-progress"><Statistic title="Đang sửa chữa" value={stats.inProgress} /></Card>
-        <Card size="small" data-testid="stat-high-open">
-          <Statistic title="Nghiêm trọng chưa xong" value={stats.highOpen} valueStyle={stats.highOpen ? { color: '#DC2626' } : undefined} />
-        </Card>
-        <Card size="small" data-testid="stat-resolved"><Statistic title="Đã khắc phục" value={stats.resolved} /></Card>
+      {/* Thanh bộ lọc tách biệt riêng phía trên Card/Bảng */}
+      <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          placeholder="Tìm tên khách, SĐT, số phòng, mô tả"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: 260 }}
+        />
+        <Select
+          data-testid="support-building-filter"
+          allowClear
+          placeholder="Tất cả tòa nhà"
+          value={buildingId}
+          onChange={(v) => setBuildingId(v ?? null)}
+          options={buildingOptions}
+          style={{ width: 160 }}
+        />
+        <Select
+          data-testid="support-status-filter"
+          allowClear
+          placeholder="Tất cả trạng thái"
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v ?? null)}
+          options={Object.entries(STATUS_TAGS).map(([value, cfg]) => ({ value, label: cfg.text }))}
+          style={{ width: 160 }}
+        />
+        <Select
+          allowClear
+          placeholder="Tất cả mức độ"
+          value={severityFilter}
+          onChange={(v) => setSeverityFilter(v ?? null)}
+          options={Object.entries(SEVERITY_TAGS).map(([value, cfg]) => ({ value, label: cfg.text }))}
+          style={{ width: 150 }}
+        />
+        <Select
+          allowClear
+          placeholder="Tất cả loại sự cố"
+          value={categoryFilter}
+          onChange={(v) => setCategoryFilter(v ?? null)}
+          options={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))}
+          style={{ width: 160 }}
+        />
       </div>
 
       <Card
         title={<span className="card-title"><Wrench size={18} color="#0F766E" aria-hidden="true" /> Danh sách sự cố</span>}
-        extra={(
-          <Space wrap>
-            <Input.Search
-              allowClear
-              placeholder="Tìm tên khách, SĐT, số phòng, mô tả"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ width: 280 }}
-            />
-            <Select
-              data-testid="support-building-filter"
-              allowClear
-              placeholder="Tất cả tòa nhà"
-              value={buildingId}
-              onChange={(v) => setBuildingId(v ?? null)}
-              options={buildingOptions}
-              style={{ width: 180 }}
-            />
-          </Space>
-        )}
         styles={{ body: { padding: 0 } }}
       >
         <Table
@@ -271,7 +299,7 @@ const SupportManager = () => {
           loading={loading}
           rowKey="id"
           pagination={{ pageSize: 8, showSizeChanger: false, showTotal: (total) => `Tổng ${total} sự cố` }}
-          scroll={{ x: 1150 }}
+          scroll={{ x: 980 }}
           locale={{ emptyText: 'Chưa có báo cáo sự cố nào' }}
         />
       </Card>

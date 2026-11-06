@@ -3,6 +3,7 @@ import { Avatar, Badge, Popover, Button, Empty } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { Bell, LogOut, Building2, Menu as MenuIcon } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
+import { performLogout } from '../../utils/authSession';
 
 const getNotificationTargetRoute = (notification, profilePath = '') => {
   const type = String(notification?.type || '').toLowerCase();
@@ -81,8 +82,7 @@ const AppHeader = ({ isMobile, onMenuClick, roleLabel, profilePath, withNotifica
   };
 
   const logout = () => {
-    localStorage.clear();
-    navigate('/login');
+    performLogout(axiosInstance, navigate);
   };
 
   const panel = (
@@ -120,7 +120,7 @@ const AppHeader = ({ isMobile, onMenuClick, roleLabel, profilePath, withNotifica
             </button>
           )}
           <div className="app-brand-mark" style={{ width: 32, height: 32 }}><Building2 size={16} aria-hidden="true" /></div>
-          <span className="app-brand-name" style={{ fontSize: 15 }}>Executive Lens</span>
+          <span className="app-brand-name" style={{ fontSize: 15 }}>HomeSync</span>
         </div>
       ) : (
         <span className="app-header-greeting">Chào mừng trở lại, <b>{username}</b></span>

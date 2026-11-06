@@ -11,6 +11,31 @@ import {
   welcomeMessage,
 } from '../../utils/chatMessages';
 
+const renderMessageContent = (content) => {
+  if (typeof content !== 'string') return content;
+  const qrMatch = content.match(/(https:\/\/(?:qr\.sepay\.vn\/img|img\.vietqr\.io\/[^\s]+)[^\s]*)/i);
+  if (qrMatch) {
+    const qrUrl = qrMatch[1];
+    const textPart = content.replace(qrUrl, '').trim();
+    return (
+      <div>
+        {textPart && <div style={{ whiteSpace: 'pre-wrap' }}>{textPart}</div>}
+        <div style={{ marginTop: 10, textAlign: 'center', background: '#F8FAFC', padding: 10, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+          <img
+            src={qrUrl}
+            alt="Mã VietQR thanh toán"
+            style={{ maxWidth: 170, height: 'auto', borderRadius: 6, display: 'inline-block' }}
+          />
+          <div style={{ fontSize: 11, color: '#64748B', marginTop: 6, fontWeight: 500 }}>
+            Mã VietQR thanh toán nhanh (quét bằng app ngân hàng)
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return <div style={{ whiteSpace: 'pre-wrap' }}>{content}</div>;
+};
+
 /**
  * Widget trò chuyện với trợ lý ảo, hiển thị ở mọi trang đã đăng nhập.
  * Lịch sử chỉ giữ trong state (mất khi tải lại trang) — backend không lưu.
@@ -143,7 +168,7 @@ const ChatWidget = () => {
               const summary = msg.pendingAction ? formatActionSummary(msg.pendingAction.tool, msg.pendingAction.params) : [];
               return (
                 <div key={i} className={`chat-msg ${msg.role}`}>
-                  {msg.content}
+                  {renderMessageContent(msg.content)}
 
                   {msg.warning && (
                     <div className="chat-action-result warning" role="status" style={{ background: '#FEF3C7', color: '#92400E', borderColor: '#F59E0B' }}>

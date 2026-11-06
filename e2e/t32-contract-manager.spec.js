@@ -83,23 +83,21 @@ test('T3.2: tìm theo tên không dấu và lọc theo tòa nhà', async ({ page
   const search = page.getByPlaceholder('Tìm tên khách, SĐT, số phòng');
   await search.fill('nguyen van');
   await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText('#1');
+  await expect(rows.first()).toContainText('Nguyễn Văn An');
 
   await search.fill('');
   await page.getByTestId('contract-building-filter').click();
   await page.locator('.ant-select-item-option', { hasText: 'Moonlight' }).click();
   await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText('#2');
+  await expect(rows.first()).toContainText('Trần Bình');
 });
 
 test('T3.2: lọc cột trạng thái theo "Sắp hết hạn"', async ({ page }) => {
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
-  await page.getByRole('columnheader', { name: /TRẠNG THÁI/ }).locator('.ant-table-filter-trigger').click();
-  const dropdown = page.locator('.ant-table-filter-dropdown');
-  await dropdown.getByText('Sắp hết hạn', { exact: true }).click();
-  await dropdown.getByRole('button', { name: /OK|Đồng ý/ }).click();
+  await page.getByTestId('contract-status-filter').click();
+  await page.locator('.ant-select-item-option', { hasText: 'Sắp hết hạn' }).click();
   await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText('#3');
+  await expect(rows.first()).toContainText('Phòng 301');
 });
 
 test('T3.2: từ chối yêu cầu phải nhập lý do và gửi responseNote', async ({ page }) => {
@@ -117,7 +115,7 @@ test('T3.2: từ chối yêu cầu phải nhập lý do và gửi responseNote',
 
 test('T3.2: xem HĐ có inventory hỏng không crash', async ({ page }) => {
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
-  await rows.filter({ hasText: '#1' }).getByRole('button', { name: /Xem HĐ/ }).click();
+  await rows.filter({ hasText: 'Nguyễn Văn An' }).getByRole('button', { name: /Xem HĐ/ }).click();
   const modal = page.getByRole('dialog').filter({ hasText: 'HỢP ĐỒNG CHO THUÊ PHÒNG TRỌ' });
   await expect(modal).toBeVisible();
   await expect(modal).toContainText('Không bàn giao thiết bị đặc biệt nào kèm theo.');
@@ -125,7 +123,7 @@ test('T3.2: xem HĐ có inventory hỏng không crash', async ({ page }) => {
 
 test('T3.2: HĐ đã thanh lý có mục Biên bản thanh lý', async ({ page }) => {
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
-  await rows.filter({ hasText: '#2' }).getByRole('button', { name: /Xem HĐ/ }).click();
+  await rows.filter({ hasText: 'Trần Bình' }).getByRole('button', { name: /Xem HĐ/ }).click();
   const modal = page.getByRole('dialog').filter({ hasText: 'HỢP ĐỒNG CHO THUÊ PHÒNG TRỌ' });
   await expect(modal).toContainText('BIÊN BẢN THANH LÝ');
   await expect(modal).toContainText('Khách trả phòng đúng hạn');

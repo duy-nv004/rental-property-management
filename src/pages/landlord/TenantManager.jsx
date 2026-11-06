@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Table, Tag, Avatar, Space, Card, Button, Modal, Form, Input, Select, message, Popconfirm, Tooltip } from 'antd';
+import { Table, Tag, Avatar, Space, Card, Button, Modal, Form, Input, Select, message, Popconfirm, Tooltip, Grid } from 'antd';
 import { UserPlus, Trash2, Users, Edit2, Search } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
@@ -13,30 +13,43 @@ const TenantManager = () => {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const isPhone = !Grid.useBreakpoint().md;
 
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
 
-  const fetchTenants = async () => {
-    setLoading(true);
+  const fetchTenants = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const data = await axiosInstance.get('/manage/tenants');
       setTenants(data);
     } catch (err) {
       console.error('Error fetching tenants:', err);
-      message.error('Không thể tải danh sách khách thuê.');
+      if (!isSilent) message.error('Không thể tải danh sách khách thuê.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchTenants();
+    // Tự động kiểm tra khách thuê mới mỗi 15 giây hoặc khi chuyển tab
+    const timer = setInterval(() => fetchTenants(true), 15000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchTenants(true);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onVisibilityChange);
+    };
   }, []);
 
   // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
   useEffect(() => {
-    const onChanged = () => { fetchTenants(); };
+    const onChanged = () => { fetchTenants(true); };
     window.addEventListener('app:data-changed', onChanged);
     return () => window.removeEventListener('app:data-changed', onChanged);
   }, []);
@@ -142,6 +155,7 @@ const TenantManager = () => {
     {
       title: 'Khách thuê',
       key: 'tenantDetails',
+      width: 220,
       render: (r) => (
         <Space>
           <Avatar style={{ background: '#CCFBF1', color: '#0F766E', fontWeight: 700 }}>
@@ -156,16 +170,14 @@ const TenantManager = () => {
                 </Tooltip>
               )}
             </div>
-            <div style={{ fontSize: 12, color: '#64748B' }}>{r.email || 'Chưa cập nhật email'}</div>
+            <div style={{ fontSize: 12, color: '#64748B' }}>
+              {r.phone && <span style={{ color: '#0F766E', fontWeight: 500 }}>{r.phone}</span>}
+              {r.phone && r.email && ' · '}
+              {r.email}
+            </div>
           </div>
         </Space>
       )
-    },
-    {
-      title: 'Số điện thoại',
-      dataIndex: 'phone',
-      key: 'phone',
-      render: (phone) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{phone}</span>
     },
     {
       title: 'Phòng đang thuê',
@@ -212,9 +224,10 @@ const TenantManager = () => {
       render: (date) => <span style={{ fontSize: 13, color: '#475569' }}>{new Date(date).toLocaleDateString('vi-VN')}</span>
     },
     {
-      title: '',
+      title: 'Thao tác',
       key: 'action',
-      width: 170,
+      width: 110,
+      fixed: 'right',
       render: (_, record) => (
         <Space size={4}>
           <Tooltip title="Sửa thông tin khách thuê">
@@ -248,8 +261,6 @@ const TenantManager = () => {
       <PageHeader
         title="Quản lý khách thuê"
         description="Tài khoản đăng nhập và liên kết Telegram của khách thuê trong khu trọ."
-        onRefresh={fetchTenants}
-        refreshLoading={loading}
         extra={
           <Button type="primary" icon={<UserPlus size={16} />} onClick={() => setModalVisible(true)}>
             Tạo tài khoản
@@ -257,31 +268,31 @@ const TenantManager = () => {
         }
       />
 
+      {/* Thanh bộ lọc tách biệt riêng phía trên Card/Bảng */}
+      <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
+        <Input
+          allowClear
+          prefix={<Search size={15} color="#94A3B8" />}
+          placeholder="Tìm theo tên hoặc SĐT..."
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 260 }}
+        />
+        <Select
+          value={filterType}
+          onChange={setFilterType}
+          style={{ width: 220 }}
+          options={[
+            { value: 'all', label: 'Tất cả khách thuê' },
+            { value: 'locked', label: 'Đã khóa' },
+            { value: 'unregistered_residence', label: 'Chưa đăng ký tạm trú' },
+            { value: 'unlinked_telegram', label: 'Chưa liên kết Telegram' }
+          ]}
+        />
+      </div>
+
       <Card
         title={<span className="card-title"><Users size={18} color="#0F766E" aria-hidden="true" /> Danh sách khách thuê</span>}
-        extra={
-          <Space wrap>
-            <Input
-              allowClear
-              prefix={<Search size={15} color="#94A3B8" />}
-              placeholder="Tìm theo tên hoặc SĐT..."
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: 220 }}
-            />
-            <Select
-              value={filterType}
-              onChange={setFilterType}
-              style={{ width: 210 }}
-              options={[
-                { value: 'all', label: 'Tất cả khách thuê' },
-                { value: 'locked', label: 'Đã khóa' },
-                { value: 'unregistered_residence', label: 'Chưa đăng ký tạm trú' },
-                { value: 'unlinked_telegram', label: 'Chưa liên kết Telegram' }
-              ]}
-            />
-          </Space>
-        }
         styles={{ body: { padding: 0 } }}
       >
         <Table
@@ -290,7 +301,7 @@ const TenantManager = () => {
           loading={loading}
           rowKey="id"
           pagination={{ pageSize: 8, showSizeChanger: false, showTotal: (total) => `Tổng ${total} khách thuê` }}
-          scroll={{ x: 820 }}
+          scroll={{ x: 720 }}
           locale={{ emptyText: 'Chưa có khách thuê nào' }}
         />
       </Card>

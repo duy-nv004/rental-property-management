@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Table, Button, Space, Popconfirm, Modal, Input, message, Grid } from 'antd';
 import { Clock, CheckCircle2, XCircle, Inbox } from 'lucide-react';
 import PropTypes from 'prop-types';
@@ -67,20 +67,39 @@ const TicketManager = () => {
   const [rejectReason, setRejectReason] = useState('');
   const isPhone = !Grid.useBreakpoint().md; // phone: vùng chạm 44px
 
-  const fetchTickets = async () => {
-    setLoading(true);
+  const fetchTickets = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const res = await axiosInstance.get('/admin/tickets');
       setTickets(res);
     } catch (err) {
       console.error(err);
-      message.error('Lỗi hệ thống khi tải danh sách ticket khiếu nại!');
+      if (!isSilent) message.error('Lỗi hệ thống khi tải danh sách ticket khiếu nại!');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchTickets(); }, []);
+  useEffect(() => {
+    fetchTickets();
+    const interval = setInterval(() => {
+      fetchTickets(true);
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchTickets(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [fetchTickets]);
 
   const handleResolveTicket = async (ticketId, status, reason) => {
     setActionLoading(ticketId);
@@ -224,8 +243,6 @@ const TicketManager = () => {
       <PageHeader
         title="Quản lý ticket khiếu nại"
         description="Xem xét, phê duyệt hoặc từ chối các yêu cầu mở khóa tài khoản từ đối tác chủ nhà."
-        onRefresh={fetchTickets}
-        refreshLoading={loading}
       />
 
       {/* Summary Stats */}

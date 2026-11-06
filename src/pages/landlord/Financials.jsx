@@ -27,21 +27,38 @@ const Financials = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const fetchStats = useCallback(async () => {
-    setLoading(true);
+  const fetchStats = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const data = await axiosInstance.get(`/invoices/status?month=${selectedMonth}&year=${selectedYear}`);
       setStats(data.stats);
     } catch (err) {
       console.error('Error fetching revenue stats:', err);
-      message.error('Không thể tải dữ liệu thống kê tài chính.');
+      if (!isSilent) message.error('Không thể tải dữ liệu thống kê tài chính.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
     fetchStats();
+    const interval = setInterval(() => {
+      fetchStats(true);
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchStats(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, [fetchStats]);
 
   // Danh sách năm: năm hiện tại và 4 năm trước đó
@@ -67,8 +84,6 @@ const Financials = () => {
       <PageHeader
         title="Thống kê tài chính"
         description="Doanh thu, tỷ lệ thu tiền và nợ đọng theo từng kỳ."
-        onRefresh={fetchStats}
-        refreshLoading={loading}
         extra={
           <div className="toolbar-wrap">
             <Select

@@ -33,8 +33,8 @@ const UtilityManagement = () => {
   // Kỳ chốt số dạng YYYY-MM, gửi kèm khi chốt số để khớp với kỳ của hóa đơn
   const currentPeriod = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const [buildingsData, roomsData] = await Promise.all([
         axiosInstance.get('/manage/buildings'),
@@ -50,14 +50,31 @@ const UtilityManagement = () => {
       }
     } catch (err) {
       console.error('Error fetching utility data:', err);
-      message.error('Không thể tải danh sách dữ liệu.');
+      if (!isSilent) message.error('Không thể tải danh sách dữ liệu.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [location.state]);
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, [fetchData]);
 
   // Lấy chỉ số cũ = bản ghi của kỳ gần nhất TRƯỚC kỳ hiện tại, giống cách backend tính hóa đơn.
@@ -333,17 +350,16 @@ const UtilityManagement = () => {
   };
 
   const columns = [
-    { title: 'Phòng', dataIndex: 'roomNumber', key: 'roomNumber', width: 90, render: (text) => <b>P.{text}</b> },
     {
-      title: 'Khách thuê',
-      key: 'tenant',
-      width: 170,
+      title: 'Phòng & Khách',
+      key: 'roomTenant',
+      width: 150,
       render: (_, record) => {
         const contract = record.contracts?.[0];
         return (
           <div>
-            <div style={{ fontWeight: 600, color: '#0F172A' }}>{contract?.tenant ? contract.tenant.name : 'N/A'}</div>
-            {contract?.tenant && <div style={{ fontSize: 12, color: '#64748B' }}>{contract.tenant.phone}</div>}
+            <div style={{ fontWeight: 600, color: '#0F172A' }}>Phòng {record.roomNumber}</div>
+            <div style={{ fontSize: 12, color: '#0F766E' }}>{contract?.tenant ? contract.tenant.name : '—'}</div>
           </div>
         );
       }
@@ -374,7 +390,8 @@ const UtilityManagement = () => {
     {
       title: 'Hành động',
       key: 'action',
-      width: 160,
+      width: 140,
+      fixed: 'right',
       render: (_, record) => (
         <Button
           type="primary"
@@ -383,7 +400,7 @@ const UtilityManagement = () => {
           disabled={isClosed(record)}
           onClick={() => handleSaveAndGenerateInvoice(record)}
         >
-          Lưu &amp; xuất HĐ
+          {isClosed(record) ? 'Đã xuất' : 'Xuất HĐ'}
         </Button>
       )
     }
@@ -394,8 +411,6 @@ const UtilityManagement = () => {
       <PageHeader
         title="Chốt số điện nước"
         description={`Chu kỳ hóa đơn tháng ${currentMonth}/${currentYear}. Chỉ hiển thị các phòng đang có khách thuê.`}
-        onRefresh={fetchData}
-        refreshLoading={loading}
         extra={
           <div className="toolbar-wrap">
             <DatePicker
@@ -443,7 +458,7 @@ const UtilityManagement = () => {
             rowKey="id"
             loading={loading}
             pagination={false}
-            scroll={{ x: 1000 }}
+            scroll={{ x: 920 }}
           />
         ) : (
           <Alert

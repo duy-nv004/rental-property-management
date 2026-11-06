@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Table, Tag, Button, Space, Select, Segmented, Modal, Form, Radio, InputNumber, Input, Popconfirm, Drawer, Descriptions, message } from 'antd';
+import { Card, Table, Tag, Button, Space, Select, Segmented, Modal, Form, Radio, InputNumber, Input, Popconfirm, Drawer, Descriptions, message, Tooltip } from 'antd';
+import { Eye, Check, RotateCcw, Trash2 } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 
@@ -35,8 +36,8 @@ const InvoiceManager = () => {
   const [submitting, setSubmitting] = useState(false);
   const [payForm] = Form.useForm();
 
-  const fetchInvoices = useCallback(async () => {
-    setLoading(true);
+  const fetchInvoices = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const params = {};
       if (status) params.status = status;
@@ -44,19 +45,31 @@ const InvoiceManager = () => {
       if (year !== 'all') params.year = year;
       setInvoices(await axiosInstance.get('/invoices', { params }));
     } catch (err) {
-      message.error(err.response?.data?.message || 'Không thể tải danh sách hóa đơn.');
+      if (!isSilent) message.error(err.response?.data?.message || 'Không thể tải danh sách hóa đơn.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [status, month, year]);
 
   useEffect(() => {
     fetchInvoices();
+    // Tự động kiểm tra hóa đơn & thanh toán mới mỗi 12 giây hoặc khi chuyển tab
+    const timer = setInterval(() => fetchInvoices(true), 12000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchInvoices(true);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onVisibilityChange);
+    };
   }, [fetchInvoices]);
 
   // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
   useEffect(() => {
-    const onChanged = () => { fetchInvoices(); };
+    const onChanged = () => { fetchInvoices(true); };
     window.addEventListener('app:data-changed', onChanged);
     return () => window.removeEventListener('app:data-changed', onChanged);
   }, [fetchInvoices]);
@@ -100,29 +113,79 @@ const InvoiceManager = () => {
   });
 
   const columns = [
-    { title: 'Phòng', render: (_, r) => r.roomDetails?.roomNumber },
-    { title: 'Tòa', render: (_, r) => r.roomDetails?.building?.name },
-    { title: 'Người thuê', render: (_, r) => r.tenant?.name || '—' },
-    { title: 'Kỳ', render: (_, r) => `${r.month}/${r.year}` },
-    { title: 'Tổng tiền', align: 'right', render: (_, r) => formatVND(r.totalAmount) },
-    { title: 'Hạn', render: (_, r) => formatDate(r.dueDate) },
-    { title: 'Trạng thái', render: (_, r) => statusTag(r) },
     {
-      title: 'Hành động',
+      title: 'Phòng / Khách',
+      key: 'roomTenant',
+      width: 170,
       render: (_, r) => (
-        <Space wrap>
-          <Button size="small" onClick={() => setViewing(r)}>Xem</Button>
-          {!r.isPaid && <Button size="small" type="primary" onClick={() => openPay(r)}>Xác nhận đã thu</Button>}
-          {/* Hóa đơn cấn trừ tiền cọc khi thanh lý (C1) không được hủy ở đây */}
+        <div>
+          <div style={{ fontWeight: 600, color: '#0F172A' }}>
+            Phòng {r.roomDetails?.roomNumber || '—'}
+            {r.roomDetails?.building?.name && <span style={{ fontWeight: 400, color: '#64748B', fontSize: 12 }}> · {r.roomDetails?.building?.name}</span>}
+          </div>
+          <div style={{ fontSize: 12, color: '#0F766E' }}>{r.tenant?.name || 'Chưa gán khách'}</div>
+        </div>
+      )
+    },
+    {
+      title: 'Kỳ',
+      key: 'period',
+      width: 85,
+      render: (_, r) => <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{r.month}/{r.year}</span>
+    },
+    {
+      title: 'Tổng tiền',
+      align: 'right',
+      key: 'totalAmount',
+      width: 130,
+      render: (_, r) => <b style={{ color: '#0F766E' }}>{formatVND(r.totalAmount)}</b>
+    },
+    {
+      title: 'Hạn',
+      key: 'dueDate',
+      width: 105,
+      render: (_, r) => <span style={{ fontSize: 12, color: '#64748B' }}>{formatDate(r.dueDate)}</span>
+    },
+    {
+      title: 'Trạng thái',
+      key: 'status',
+      width: 120,
+      render: (_, r) => statusTag(r)
+    },
+    {
+      title: 'Thao tác',
+      key: 'action',
+      width: 120,
+      fixed: 'right',
+      render: (_, r) => (
+        <Space size={4}>
+          <Tooltip title="Xem chi tiết hóa đơn">
+            <Button size="small" icon={<Eye size={14} />} onClick={() => setViewing(r)} aria-label="Xem chi tiết hóa đơn" />
+          </Tooltip>
+          {!r.isPaid && (
+            <Tooltip title="Xác nhận đã thu tiền">
+              <Button size="small" type="primary" icon={<Check size={14} />} onClick={() => openPay(r)} aria-label="Xác nhận đã thu tiền">
+                Thu
+              </Button>
+            </Tooltip>
+          )}
           {r.isPaid && r.paymentMethod !== 'deposit' && (
-            <Popconfirm title="Hủy xác nhận thanh toán của hóa đơn này?" okText="Hủy xác nhận" cancelText="Không"
-              onConfirm={() => updatePayment(r, { isPaid: false })}>
-              <Button size="small" danger>Hủy xác nhận</Button>
+            <Popconfirm
+              title="Hủy xác nhận thanh toán của hóa đơn này?"
+              okText="Hủy xác nhận"
+              cancelText="Không"
+              onConfirm={() => updatePayment(r, { isPaid: false })}
+            >
+              <Tooltip title="Hủy xác nhận thu tiền">
+                <Button size="small" danger icon={<RotateCcw size={14} />} aria-label="Hủy xác nhận thanh toán" />
+              </Tooltip>
             </Popconfirm>
           )}
           {!r.isPaid && Number(r.paidAmount || 0) === 0 && (
             <Popconfirm title="Xóa hóa đơn này để xuất lại?" okText="Xóa" cancelText="Không" onConfirm={() => handleDelete(r)}>
-              <Button size="small" danger type="text">Xóa</Button>
+              <Tooltip title="Xóa hóa đơn">
+                <Button size="small" danger type="text" icon={<Trash2 size={14} />} aria-label="Xóa hóa đơn" />
+              </Tooltip>
             </Popconfirm>
           )}
         </Space>
@@ -165,7 +228,7 @@ const InvoiceManager = () => {
             { value: 'paid', label: 'Đã thu' },
           ]}
         />
-        <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredInvoices} scroll={{ x: 900 }}
+        <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredInvoices} scroll={{ x: 740 }}
           locale={{ emptyText: 'Không có hóa đơn nào' }} />
       </Card>
 

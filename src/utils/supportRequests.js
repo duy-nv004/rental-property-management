@@ -38,11 +38,14 @@ export const supportStats = (list) => {
   return stats;
 };
 
-/** Lọc theo ô tìm kiếm (tên/SĐT khách, số phòng, mô tả) và tòa nhà. */
-export const filterSupportRequests = (list, { search, buildingId } = {}) => {
+/** Lọc theo ô tìm kiếm (tên/SĐT khách, số phòng, mô tả), tòa nhà, trạng thái, mức độ và loại sự cố. */
+export const filterSupportRequests = (list, { search, buildingId, status, severity, category } = {}) => {
   const q = normalizeText(search);
   return (Array.isArray(list) ? list : []).filter((r) => {
     if (buildingId != null && buildingId !== '' && r.room?.building?.id !== buildingId) return false;
+    if (status && r.status !== status) return false;
+    if (severity && r.severity !== severity) return false;
+    if (category && (r.category || 'other') !== category) return false;
     if (!q) return true;
     const haystack = [r.tenant?.name, r.tenant?.phone, r.room?.roomNumber, r.description]
       .map(normalizeText)

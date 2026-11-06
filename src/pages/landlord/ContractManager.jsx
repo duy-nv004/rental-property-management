@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import { Table, Tag, Card, Button, Space, Modal, Form, Select, DatePicker, InputNumber, message, Popconfirm, Spin, Row, Col, Checkbox, Upload, Input, Alert, Descriptions, Drawer, Badge, Grid } from 'antd';
+import { Table, Tag, Card, Button, Space, Modal, Form, Select, DatePicker, InputNumber, message, Popconfirm, Spin, Row, Col, Checkbox, Upload, Input, Alert, Descriptions, Drawer, Badge, Grid, Tooltip } from 'antd';
 import dayjs from 'dayjs';
-import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus, RotateCcw, Trash2 } from 'lucide-react';
+import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus, RotateCcw, Trash2, Users } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import PageHeader from '../../components/admin/PageHeader';
 import axiosInstance from '../../utils/axios';
@@ -63,6 +63,7 @@ const ContractManager = () => {
   // Bộ lọc danh sách HĐ (tách khỏi selectedBuildingId của form lập HĐ)
   const [search, setSearch] = useState('');
   const [filterBuildingId, setFilterBuildingId] = useState(null);
+  const [filterStatus, setFilterStatus] = useState(null);
 
   // State tạo nhanh khách thuê trong modal hợp đồng
   const [quickTenantModalVisible, setQuickTenantModalVisible] = useState(false);
@@ -119,6 +120,24 @@ const ContractManager = () => {
   useEffect(() => {
     fetchData();
     fetchRequests();
+    // Tự động kiểm tra hợp đồng và yêu cầu mới mỗi 12 giây hoặc khi chuyển tab
+    const timer = setInterval(() => {
+      fetchData();
+      fetchRequests();
+    }, 12000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData();
+        fetchRequests();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onVisibilityChange);
+    };
   }, []);
 
   // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
@@ -658,14 +677,9 @@ const ContractManager = () => {
 
   const columns = [
     { 
-      title: 'MÃ HĐ', 
-      dataIndex: 'id', 
-      key: 'id',
-      render: (text) => <b>#{text}</b> 
-    },
-    { 
       title: 'KHÁCH THUÊ (BÊN B)', 
       key: 'tenantName',
+      width: 170,
       render: (_, record) => (
         <div>
           <strong>{record.tenantCccd ? record.tenantName || record.tenant?.name : record.tenant?.name || 'Chưa gán khách'}</strong>
@@ -677,6 +691,7 @@ const ContractManager = () => {
     { 
       title: 'PHÒNG', 
       key: 'roomNumber',
+      width: 150,
       render: (_, record) => {
         if (!record.room) return 'Không xác định';
         return `Phòng ${record.room.roomNumber} (${record.room.building?.name || ''})`;
@@ -685,7 +700,7 @@ const ContractManager = () => {
     {
       title: 'THỜI HẠN THUÊ',
       key: 'period',
-      sorter: compareEndDate,
+      width: 160,
       render: (_, record) => {
         if (!record.startDate || !record.endDate) return 'N/A';
         const start = new Date(record.startDate).toLocaleDateString('vi-VN');
@@ -697,23 +712,14 @@ const ContractManager = () => {
       title: 'TIỀN ĐẶT CỌ', 
       dataIndex: 'deposit', 
       key: 'deposit',
+      width: 120,
       render: (deposit) => <b>{formatVND(deposit)}</b> 
     },
     { 
       title: 'TRẠNG THÁI', 
       dataIndex: 'status',
       key: 'status',
-      filters: [
-        { text: 'Đang hoạt động', value: 'active' },
-        { text: 'Sắp hết hạn', value: 'expiring' },
-        { text: 'Quá hạn', value: 'overdue' },
-        { text: 'Chờ khách ký', value: 'pending_tenant_signature' },
-        { text: 'Đã gia hạn', value: 'renewed' },
-        { text: 'Đã thanh lý', value: 'terminated' },
-        { text: 'Đã hủy', value: 'cancelled' },
-        { text: 'Bị từ chối', value: 'rejected' },
-      ],
-      onFilter: (value, record) => contractFilterKeys(record).includes(value),
+      width: 140,
       render: (status, record) => {
         let color = 'default';
         let text = status;
@@ -736,19 +742,22 @@ const ContractManager = () => {
     {
       title: 'HÀNH ĐỘNG',
       key: 'action',
+      fixed: 'right',
+      width: 140,
       render: (_, record) => (
-        <Space size="middle">
-          <Button 
-            type="default" 
-            icon={<Eye size={14} />} 
-            size="small" 
-            onClick={() => {
-              setSelectedContract(record);
-              setDetailModalVisible(true);
-            }}
-          >
-            Xem HĐ
-          </Button>
+        <Space size={4} wrap>
+          <Tooltip title="Xem chi tiết hợp đồng">
+            <Button 
+              type="default" 
+              icon={<Eye size={14} />} 
+              size="small" 
+              onClick={() => {
+                setSelectedContract(record);
+                setDetailModalVisible(true);
+              }}
+              aria-label="Xem HĐ"
+            />
+          </Tooltip>
           {record.status === 'pending_tenant_signature' && (
             <Popconfirm
               title="Hủy hợp đồng chờ"
@@ -757,30 +766,51 @@ const ContractManager = () => {
               cancelText="Hủy"
               onConfirm={() => handleCancelContract(record.id)}
             >
-              <Button type="primary" danger size="small">
-                Hủy HĐ
-              </Button>
+              <Tooltip title="Hủy hợp đồng chờ ký">
+                <Button type="primary" danger size="small" aria-label="Hủy HĐ">
+                  Hủy
+                </Button>
+              </Tooltip>
             </Popconfirm>
           )}
           {record.status === 'active' && (
-            <Button size="small" icon={<RotateCcw size={14} aria-hidden="true" />} onClick={() => handleOpenRenew(record)}>
-              Gia hạn
-            </Button>
+            <Tooltip title="Gia hạn hợp đồng">
+              <Button
+                size="small"
+                icon={<RotateCcw size={14} aria-hidden="true" />}
+                onClick={() => handleOpenRenew(record)}
+                aria-label="Gia hạn"
+              />
+            </Tooltip>
           )}
           {record.status === 'active' && (
-            <Button type="primary" danger size="small" onClick={() => handleOpenTerminate(record)}>
-              Thanh lý
-            </Button>
+            <Tooltip title="Thanh lý hợp đồng">
+              <Button
+                type="primary"
+                danger
+                size="small"
+                icon={<Trash2 size={14} />}
+                onClick={() => handleOpenTerminate(record)}
+                aria-label="Thanh lý"
+              />
+            </Tooltip>
           )}
           {['active', 'pending_tenant_signature'].includes(record.status) && (
-            <Button size="small" onClick={() => handleOpenOccupants(record)}>
-              Người ở
-            </Button>
+            <Tooltip title="Danh sách người ở cùng">
+              <Button
+                size="small"
+                icon={<Users size={14} />}
+                onClick={() => handleOpenOccupants(record)}
+                aria-label="Người ở"
+              />
+            </Tooltip>
           )}
           {['terminated', 'cancelled', 'rejected'].includes(record.status) && Number(record.deposit) > 0 && (
-            <Button size="small" onClick={() => handleOpenDeposit(record)}>
-              Tiền cọc
-            </Button>
+            <Tooltip title="Xử lý hoàn trả tiền cọc">
+              <Button size="small" onClick={() => handleOpenDeposit(record)}>
+                Tiền cọc
+              </Button>
+            </Tooltip>
           )}
         </Space>
       )
@@ -813,30 +843,48 @@ const ContractManager = () => {
         }
       />
 
+      {/* Thanh bộ lọc tách biệt riêng phía trên Card/Bảng */}
+      <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          placeholder="Tìm tên khách, SĐT, số phòng"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: 260 }}
+        />
+        <Select
+          data-testid="contract-building-filter"
+          allowClear
+          placeholder="Tất cả tòa nhà"
+          value={filterBuildingId}
+          onChange={(v) => setFilterBuildingId(v ?? null)}
+          options={buildings.map((b) => ({ value: b.id, label: b.name }))}
+          style={{ width: 180 }}
+        />
+        <Select
+          data-testid="contract-status-filter"
+          allowClear
+          placeholder="Tất cả trạng thái"
+          value={filterStatus}
+          onChange={(v) => setFilterStatus(v ?? null)}
+          options={[
+            { value: 'active', label: 'Đang hoạt động' },
+            { value: 'expiring', label: 'Sắp hết hạn' },
+            { value: 'overdue', label: 'Quá hạn' },
+            { value: 'pending_tenant_signature', label: 'Chờ khách ký' },
+            { value: 'renewed', label: 'Đã gia hạn' },
+            { value: 'terminated', label: 'Đã thanh lý' },
+            { value: 'cancelled', label: 'Đã hủy' },
+            { value: 'rejected', label: 'Bị từ chối' },
+          ]}
+          style={{ width: 180 }}
+        />
+      </div>
+
       <Card
         variant="borderless"
         className="stat-card"
         title={<span className="card-title"><FileSignature size={18} color="#0F766E" aria-hidden="true" /> Danh sách hợp đồng thuê phòng</span>}
-        extra={(
-          <Space wrap>
-            <Input.Search
-              allowClear
-              placeholder="Tìm tên khách, SĐT, số phòng"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ width: 260 }}
-            />
-            <Select
-              data-testid="contract-building-filter"
-              allowClear
-              placeholder="Tất cả tòa nhà"
-              value={filterBuildingId}
-              onChange={(v) => setFilterBuildingId(v ?? null)}
-              options={buildings.map((b) => ({ value: b.id, label: b.name }))}
-              style={{ width: 200 }}
-            />
-          </Space>
-        )}
       >
         {loading ? (
           <div className="loading-block">
@@ -845,7 +893,7 @@ const ContractManager = () => {
         ) : (
           <Table
             columns={columns}
-            dataSource={filterContracts(contracts, { search, buildingId: filterBuildingId })}
+            dataSource={filterContracts(contracts, { search, buildingId: filterBuildingId, statuses: filterStatus ? [filterStatus] : null })}
             rowKey="id"
             pagination={{ pageSize: 8 }}
             scroll={{ x: 'max-content' }}

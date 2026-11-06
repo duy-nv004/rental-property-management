@@ -88,37 +88,65 @@ const ActivityLogs = () => {
 
   const isPhone = !Grid.useBreakpoint().md;
 
-  const fetchLogs = useCallback(async (p = 1, size = 20, f = {}) => {
-    setLoading(true);
+  const fetchLogs = useCallback(async (p = 1, size = 20, f = {}, isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const res = await axiosInstance.get('/admin/logs', { params: { page: p, pageSize: size, ...f } });
       setLogs(res.items || []);
       setTotal(res.total || 0);
     } catch (err) {
       console.error(err);
-      message.error('Lỗi hệ thống khi tải nhật ký hoạt động!');
+      if (!isSilent) message.error('Lỗi hệ thống khi tải nhật ký hoạt động!');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, []);
 
-  const fetchSePayEvents = useCallback(async (p = 1, size = 20, f = {}) => {
-    setSepayLoading(true);
+  const fetchSePayEvents = useCallback(async (p = 1, size = 20, f = {}, isSilent = false) => {
+    if (!isSilent) setSepayLoading(true);
     try {
       const res = await axiosInstance.get('/admin/sepay-events', { params: { page: p, pageSize: size, ...f } });
       setSepayEvents(res.items || []);
-      setSepayTotal(res.total || 0);
+      setTotal(res.total || 0);
     } catch (err) {
       console.error(err);
-      message.error('Lỗi hệ thống khi tải danh sách đối soát SePay!');
+      if (!isSilent) message.error('Lỗi hệ thống khi tải danh sách đối soát SePay!');
     } finally {
-      setSepayLoading(false);
+      if (!isSilent) setSepayLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchLogs(1, 20, {});
-  }, [fetchLogs]);
+    fetchLogs(page, pageSize, filters);
+  }, [fetchLogs, page, pageSize, filters]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeTab === 'logs') {
+        fetchLogs(page, pageSize, filters, true);
+      } else {
+        fetchSePayEvents(sepayPage, sepayPageSize, sepayFilters, true);
+      }
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (activeTab === 'logs') {
+          fetchLogs(page, pageSize, filters, true);
+        } else {
+          fetchSePayEvents(sepayPage, sepayPageSize, sepayFilters, true);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [activeTab, fetchLogs, fetchSePayEvents, filters, page, pageSize, sepayFilters, sepayPage, sepayPageSize]);
 
   const handleTabChange = (key) => {
     setActiveTab(key);
@@ -261,10 +289,6 @@ const ActivityLogs = () => {
       <PageHeader
         title="Nhật ký hoạt động & Đối soát SePay"
         description="Lịch sử lưu vết thao tác quản trị và hàng đợi đối soát các giao dịch webhook SePay."
-        onRefresh={() => (activeTab === 'logs'
-          ? fetchLogs(page, pageSize, filters)
-          : fetchSePayEvents(sepayPage, sepayPageSize, sepayFilters))}
-        refreshLoading={activeTab === 'logs' ? loading : sepayLoading}
       />
 
       <Tabs

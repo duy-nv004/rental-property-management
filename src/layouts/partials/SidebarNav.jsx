@@ -1,6 +1,8 @@
 import { Menu } from 'antd';
 import { Building2, LogOut } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import axiosInstance from '../../utils/axios';
+import { performLogout } from '../../utils/authSession';
 
 // Sidebar dùng chung cho Admin / Landlord / Tenant
 const SidebarNav = ({ subtitle, items, onNavigate }) => {
@@ -9,8 +11,7 @@ const SidebarNav = ({ subtitle, items, onNavigate }) => {
 
   const go = (key) => {
     if (key === 'logout') {
-      localStorage.clear();
-      navigate('/login');
+      performLogout(axiosInstance, navigate);
     } else {
       navigate(key);
     }
@@ -22,7 +23,7 @@ const SidebarNav = ({ subtitle, items, onNavigate }) => {
       <div className="app-brand">
         <div className="app-brand-mark"><Building2 size={18} aria-hidden="true" /></div>
         <div>
-          <div className="app-brand-name">Executive Lens</div>
+          <div className="app-brand-name">HomeSync</div>
           <div className="app-brand-sub">{subtitle}</div>
         </div>
       </div>
