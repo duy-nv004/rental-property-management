@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Form, Input, Button, message, Avatar, Spin, Alert } from 'antd';
-import { User, KeyRound, Save, Send, CheckCircle2 } from 'lucide-react';
+import { User, KeyRound, Save, Send, CheckCircle2, Smartphone } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 
@@ -220,6 +220,23 @@ const LandlordProfile = () => {
                 </Button>
               </>
             )}
+          </Card>
+          <Card
+            title={<span className="card-title"><Smartphone size={18} color="#0F766E" aria-hidden="true" /> Ứng dụng Di động (PWA)</span>}
+            style={{ marginTop: 20 }}
+          >
+            <div style={{ fontSize: 13, color: '#475569', marginBottom: 12 }}>
+              Cài đặt SmartRental vào điện thoại hoặc máy tính để truy cập nhanh từ màn hình chính, hoạt động mượt mà không cần thanh địa chỉ trình duyệt.
+            </div>
+            <Button
+              type="default"
+              block
+              icon={<Smartphone size={16} />}
+              style={{ borderColor: '#0F766E', color: '#0F766E', fontWeight: 600 }}
+              onClick={() => window.dispatchEvent(new CustomEvent('pwa:open-install-modal'))}
+            >
+              Xem hướng dẫn & Cài đặt App
+            </Button>
           </Card>
         </Col>
       </Row>

@@ -3,6 +3,7 @@ import { Table, Tag, Avatar, Space, Card, Button, Modal, Form, Input, Select, me
 import { UserPlus, Trash2, Users, Edit2, Search } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
+import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
 
 const TenantManager = () => {
   const [loading, setLoading] = useState(true);
@@ -202,6 +203,7 @@ const TenantManager = () => {
       title: 'Liên kết Telegram',
       dataIndex: 'telegramChatId',
       key: 'telegramChatId',
+      responsive: ['md'],
       render: (chatId) => (
         <Tag color={chatId ? 'success' : 'warning'}>{chatId ? `Đã liên kết (${chatId})` : 'Chưa liên kết'}</Tag>
       )
@@ -210,6 +212,7 @@ const TenantManager = () => {
       // Số người đã khai báo tạm trú / tổng số người ở trên các HĐ active (C6)
       title: 'Tạm trú',
       key: 'residence',
+      responsive: ['sm'],
       render: (_, r) => {
         const occ = (r.rentals || []).flatMap((c) => c.occupants || []);
         if (occ.length === 0) return <span style={{ color: '#94A3B8' }}>—</span>;
@@ -221,6 +224,7 @@ const TenantManager = () => {
       title: 'Ngày tạo tài khoản',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      responsive: ['lg'],
       render: (date) => <span style={{ fontSize: 13, color: '#475569' }}>{new Date(date).toLocaleDateString('vi-VN')}</span>
     },
     {
@@ -268,28 +272,36 @@ const TenantManager = () => {
         }
       />
 
-      {/* Thanh bộ lọc tách biệt riêng phía trên Card/Bảng */}
-      <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
-        <Input
-          allowClear
-          prefix={<Search size={15} color="#94A3B8" />}
-          placeholder="Tìm theo tên hoặc SĐT..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          style={{ width: 260 }}
-        />
-        <Select
-          value={filterType}
-          onChange={setFilterType}
-          style={{ width: 220 }}
-          options={[
-            { value: 'all', label: 'Tất cả khách thuê' },
-            { value: 'locked', label: 'Đã khóa' },
-            { value: 'unregistered_residence', label: 'Chưa đăng ký tạm trú' },
-            { value: 'unlinked_telegram', label: 'Chưa liên kết Telegram' }
-          ]}
-        />
-      </div>
+      {/* Thanh bộ lọc đáp ứng chuẩn UI/UX Pro Max */}
+      <ResponsiveFilterBar
+        search={{
+          placeholder: 'Tìm theo tên hoặc SĐT...',
+          value: searchText,
+          onChange: (e) => setSearchText(e.target.value),
+          'data-testid': 'tenant-search-input'
+        }}
+        filters={[
+          {
+            key: 'filterType',
+            label: 'Phân loại khách thuê',
+            placeholder: 'Tất cả khách thuê',
+            value: filterType,
+            onChange: (v) => setFilterType(v ?? 'all'),
+            options: [
+              { value: 'all', label: 'Tất cả khách thuê' },
+              { value: 'locked', label: 'Đã khóa' },
+              { value: 'unregistered_residence', label: 'Chưa đăng ký tạm trú' },
+              { value: 'unlinked_telegram', label: 'Chưa liên kết Telegram' }
+            ],
+            'data-testid': 'tenant-type-filter',
+            width: 220
+          }
+        ]}
+        onReset={() => {
+          setSearchText('');
+          setFilterType('all');
+        }}
+      />
 
       <Card
         title={<span className="card-title"><Users size={18} color="#0F766E" aria-hidden="true" /> Danh sách khách thuê</span>}

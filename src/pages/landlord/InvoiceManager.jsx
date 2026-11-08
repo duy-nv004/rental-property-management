@@ -4,6 +4,7 @@ import { Card, Table, Tag, Button, Space, Select, Segmented, Modal, Form, Radio,
 import { Eye, Check, RotateCcw, Trash2 } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
+import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
 
 const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
 const formatDate = (d) => (d ? new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—');
@@ -160,7 +161,7 @@ const InvoiceManager = () => {
       render: (_, r) => (
         <Space size={4}>
           <Tooltip title="Xem chi tiết hóa đơn">
-            <Button size="small" icon={<Eye size={14} />} onClick={() => setViewing(r)} aria-label="Xem chi tiết hóa đơn" />
+            <Button size="small" icon={<Eye size={14} />} onClick={() => setViewing(r)} aria-label="Xem" />
           </Tooltip>
           {!r.isPaid && (
             <Tooltip title="Xác nhận đã thu tiền">
@@ -198,36 +199,65 @@ const InvoiceManager = () => {
       <PageHeader
         title="Hóa đơn"
         description="Theo dõi công nợ từng phòng và xác nhận khi đã thu tiền."
-        extra={
-          <div className="toolbar-wrap">
-            <Input.Search
-              allowClear
-              placeholder="Tìm số phòng hoặc tên khách..."
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: 220 }}
-            />
-            <Select aria-label="Chọn tháng" value={month} style={{ minWidth: 120 }} onChange={setMonth}
-              options={[{ value: 'all', label: 'Mọi tháng' }, ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))]} />
-            <Select aria-label="Chọn năm" value={year} style={{ minWidth: 120 }} onChange={setYear}
-              options={[{ value: 'all', label: 'Mọi năm' }, ...[currentYear + 1, currentYear, currentYear - 1, currentYear - 2].map((y) => ({ value: y, label: `${y}` }))]} />
-          </div>
-        }
+      />
+
+      {/* Thanh bộ lọc đáp ứng chuẩn UI/UX Pro Max */}
+      <ResponsiveFilterBar
+        search={{
+          placeholder: 'Tìm số phòng hoặc tên khách...',
+          value: searchText,
+          onChange: (e) => setSearchText(e.target.value),
+          'data-testid': 'invoice-search-input'
+        }}
+        filters={[
+          {
+            key: 'month',
+            label: 'Chọn tháng',
+            placeholder: 'Mọi tháng',
+            value: month,
+            onChange: (v) => setMonth(v ?? 'all'),
+            options: [
+              { value: 'all', label: 'Mọi tháng' },
+              ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
+            ],
+            'data-testid': 'invoice-month-filter',
+            width: 130
+          },
+          {
+            key: 'year',
+            label: 'Chọn năm',
+            placeholder: 'Mọi năm',
+            value: year,
+            onChange: (v) => setYear(v ?? 'all'),
+            options: [
+              { value: 'all', label: 'Mọi năm' },
+              ...[currentYear + 1, currentYear, currentYear - 1, currentYear - 2].map((y) => ({ value: y, label: `${y}` }))
+            ],
+            'data-testid': 'invoice-year-filter',
+            width: 120
+          }
+        ]}
+        onReset={() => {
+          setSearchText('');
+          setMonth('all');
+          setYear('all');
+        }}
       />
 
       <Card>
-        <Segmented
-          value={status}
-          onChange={setStatus}
-          style={{ marginBottom: 16 }}
-          options={[
-            { value: '', label: 'Tất cả' },
-            { value: 'unpaid', label: 'Chưa thu' },
-            { value: 'partial', label: 'Đã thu một phần' },
-            { value: 'overdue', label: 'Quá hạn' },
-            { value: 'paid', label: 'Đã thu' },
-          ]}
-        />
+        <div className="scroll-x" style={{ marginBottom: 16 }}>
+          <Segmented
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: '', label: 'Tất cả' },
+              { value: 'unpaid', label: 'Chưa thu' },
+              { value: 'partial', label: 'Đã thu một phần' },
+              { value: 'overdue', label: 'Quá hạn' },
+              { value: 'paid', label: 'Đã thu' },
+            ]}
+          />
+        </div>
         <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredInvoices} scroll={{ x: 740 }}
           locale={{ emptyText: 'Không có hóa đơn nào' }} />
       </Card>

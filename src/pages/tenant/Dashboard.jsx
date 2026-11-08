@@ -9,12 +9,12 @@ import '../../styles/tenant.css';
 import axiosInstance from '../../utils/axios';
 
 const StatCard = ({ label, value, note, icon, tone, action }) => (
-  <Card className="stat-card stat-card-tight">
+  <Card className="stat-card stat-card-tight mobile-compact">
     <div className="stat-head">
       <div className="stat-head-main">
         <div className="stat-label">{label}</div>
         <div className={`stat-value stat-value-sm text-${tone}`}>{value}</div>
-        {note && <div className="stat-sub">{note}</div>}
+        {note && <div className="stat-sub stat-note">{note}</div>}
       </div>
       <div className={`stat-icon ${tone}`} aria-hidden="true">{icon}</div>
     </div>
@@ -141,7 +141,7 @@ const TenantDashboard = () => {
       <Row gutter={[16, 16]}>
 
         {/* DƯ NỢ / SỐ TIỀN CẦN THANH TOÁN */}
-        <Col xs={24} sm={12} md={8}>
+        <Col xs={12} sm={12} md={8}>
           <StatCard
             label="Cần thanh toán"
             value={formatVND(totalUnpaid)}
@@ -163,7 +163,7 @@ const TenantDashboard = () => {
         </Col>
 
         {/* GIÁ THUÊ PHÒNG */}
-        <Col xs={24} sm={12} md={8}>
+        <Col xs={12} sm={12} md={8}>
           <StatCard
             label="Giá thuê phòng"
             value={formatVND(room.price)}

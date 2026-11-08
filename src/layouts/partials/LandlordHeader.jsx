@@ -150,8 +150,8 @@ const LandlordHeader = ({ onMenuClick }) => {
             onClick={onMenuClick} 
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ background: '#0f172a', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}>
-              <Building size={16} color="#38bdf8" />
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
+              <img src="/favicon.png" alt="HomeSync Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <span style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a', letterSpacing: '0.5px' }}>HOMESYNC</span>
           </div>

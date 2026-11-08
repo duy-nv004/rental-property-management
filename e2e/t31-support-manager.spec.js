@@ -49,15 +49,15 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/landlord/support');
 });
 
-test('T3.1: mặc định chờ xử lý + nghiêm trọng lên đầu, có thông tin Người báo', async ({ page }) => {
+test('T3.1: mặc định sự cố mới nhất lên đầu, có thông tin Người báo', async ({ page }) => {
   const rows = page.locator('.ant-table-tbody tr.ant-table-row');
   await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0)).toContainText('Ổ điện cháy');
+  await expect(rows.nth(0)).toContainText('Bóng đèn hỏng');
   await expect(rows.nth(1)).toContainText('Vòi nước rò');
-  await expect(rows.nth(2)).toContainText('Bóng đèn hỏng');
+  await expect(rows.nth(2)).toContainText('Ổ điện cháy');
   await expect(page.getByRole('columnheader', { name: /Người báo|Phòng/ })).toBeVisible();
-  await expect(rows.nth(0)).toContainText('Nguyễn Văn An');
-  await expect(rows.nth(0)).toContainText('0901234567');
+  await expect(rows.nth(0)).toContainText('Lê Cường');
+  await expect(rows.nth(0)).toContainText('0911111111');
 });
 
 test('T3.1: tìm theo tên không dấu và lọc theo tòa nhà', async ({ page }) => {

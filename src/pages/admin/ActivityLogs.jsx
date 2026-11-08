@@ -4,6 +4,7 @@ import { ShieldOff, ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
 import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
+import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ const ActivityLogs = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [filters, setFilters] = useState({}); // { action, from, to, q }
+  const [searchQ, setSearchQ] = useState('');
 
   // Trạng thái tab Đối soát SePay (T1.3)
   const [sepayLoading, setSepayLoading] = useState(false);
@@ -85,6 +87,7 @@ const ActivityLogs = () => {
   const [sepayPage, setSepayPage] = useState(1);
   const [sepayPageSize, setSepayPageSize] = useState(20);
   const [sepayFilters, setSepayFilters] = useState({});
+  const [sepaySearchQ, setSepaySearchQ] = useState('');
 
   const isPhone = !Grid.useBreakpoint().md;
 
@@ -177,6 +180,7 @@ const ActivityLogs = () => {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 175,
+      responsive: ['md'],
       render: (date) => (
         <span style={{ color: '#64748b', fontSize: '12px' }}>
           {new Date(date).toLocaleString('vi-VN')}
@@ -300,28 +304,45 @@ const ActivityLogs = () => {
             label: 'Nhật ký hệ thống',
             children: (
               <>
-                <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
-                  <Select
-                    aria-label="Loại hành động"
-                    placeholder="Loại hành động"
-                    allowClear
-                    style={{ width: isPhone ? '100%' : 240 }}
-                    value={filters.action}
-                    onChange={(action) => applyFilters({ action })}
-                    options={Object.entries(ACTION_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }))}
-                  />
-                  <DatePicker.RangePicker
-                    style={isPhone ? { width: '100%' } : undefined}
-                    format="DD/MM/YYYY"
-                    onChange={(range) => applyFilters({ from: range?.[0]?.format('YYYY-MM-DD'), to: range?.[1]?.format('YYYY-MM-DD') })}
-                  />
-                  <Input.Search
-                    placeholder="Tìm theo mô tả"
-                    allowClear
-                    style={{ width: isPhone ? '100%' : 260 }}
-                    onSearch={(q) => applyFilters({ q: q.trim() })}
-                  />
-                </div>
+                <ResponsiveFilterBar
+                  search={{
+                    placeholder: 'Tìm theo mô tả',
+                    'aria-label': 'Tìm theo mô tả',
+                    value: searchQ,
+                    onChange: (e) => {
+                      const val = e.target.value;
+                      setSearchQ(val);
+                      if (!val) applyFilters({ q: undefined });
+                    },
+                    onPressEnter: () => applyFilters({ q: searchQ.trim() }),
+                    width: 260,
+                  }}
+                  filters={[
+                    {
+                      key: 'action',
+                      label: 'Loại hành động',
+                      'aria-label': 'Loại hành động',
+                      placeholder: 'Loại hành động',
+                      value: filters.action,
+                      onChange: (action) => applyFilters({ action }),
+                      options: Object.entries(ACTION_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label })),
+                      width: 240,
+                    },
+                  ]}
+                  extra={
+                    <DatePicker.RangePicker
+                      style={isPhone ? { width: '100%', minHeight: 40 } : { minHeight: 40 }}
+                      format="DD/MM/YYYY"
+                      onChange={(range) => applyFilters({ from: range?.[0]?.format('YYYY-MM-DD'), to: range?.[1]?.format('YYYY-MM-DD') })}
+                    />
+                  }
+                  onReset={() => {
+                    setSearchQ('');
+                    setFilters({});
+                    setPage(1);
+                    fetchLogs(1, pageSize, {});
+                  }}
+                />
 
                 <Card styles={{ body: { padding: 0 } }}>
                   <Table
@@ -350,23 +371,38 @@ const ActivityLogs = () => {
             label: 'Đối soát SePay',
             children: (
               <>
-                <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
-                  <Select
-                    aria-label="Trạng thái giao dịch SePay"
-                    placeholder="Lọc trạng thái xử lý"
-                    allowClear
-                    style={{ width: isPhone ? '100%' : 220 }}
-                    value={sepayFilters.status}
-                    onChange={(status) => applySepayFilters({ status })}
-                    options={SEPAY_STATUS_OPTIONS}
-                  />
-                  <Input.Search
-                    placeholder="Tìm nội dung CK, mã GD hoặc lý do lỗi"
-                    allowClear
-                    style={{ width: isPhone ? '100%' : 300 }}
-                    onSearch={(q) => applySepayFilters({ q: q.trim() })}
-                  />
-                </div>
+                <ResponsiveFilterBar
+                  search={{
+                    placeholder: 'Tìm nội dung CK, mã GD hoặc lý do lỗi',
+                    'aria-label': 'Tìm nội dung CK, mã GD hoặc lý do lỗi',
+                    value: sepaySearchQ,
+                    onChange: (e) => {
+                      const val = e.target.value;
+                      setSepaySearchQ(val);
+                      if (!val) applySepayFilters({ q: undefined });
+                    },
+                    onPressEnter: () => applySepayFilters({ q: sepaySearchQ.trim() }),
+                    width: 300,
+                  }}
+                  filters={[
+                    {
+                      key: 'status',
+                      label: 'Trạng thái xử lý',
+                      'aria-label': 'Trạng thái giao dịch SePay',
+                      placeholder: 'Lọc trạng thái xử lý',
+                      value: sepayFilters.status,
+                      onChange: (status) => applySepayFilters({ status }),
+                      options: SEPAY_STATUS_OPTIONS,
+                      width: 220,
+                    },
+                  ]}
+                  onReset={() => {
+                    setSepaySearchQ('');
+                    setSepayFilters({});
+                    setSepayPage(1);
+                    fetchSePayEvents(1, sepayPageSize, {});
+                  }}
+                />
 
                 <Card styles={{ body: { padding: 0 } }}>
                   <Table

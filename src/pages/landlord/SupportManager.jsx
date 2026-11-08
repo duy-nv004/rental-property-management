@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Table, Tag, Card, Button, Space, message, Modal, Form, Input, InputNumber, Image, Select, Grid, Tooltip } from 'antd';
-import { Wrench, CheckCircle2, Play, User } from 'lucide-react';
+import { Table, Tag, Card, Button, Space, message, Modal, Form, Input, InputNumber, Image, Select, Grid, Tooltip, Radio } from 'antd';
+import { Wrench, CheckCircle2, Play, User, DollarSign } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import { sortSupportRequests, filterSupportRequests } from '../../utils/supportRequests';
 import PageHeader from '../../components/admin/PageHeader';
 import { CATEGORY_LABELS } from '../tenant/Support';
 import SupportImage from '../../components/common/SupportImage';
+import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
 
 const SEVERITY_TAGS = {
   high: { color: 'error', text: 'Nghiêm trọng' },
@@ -136,6 +137,7 @@ const SupportManager = () => {
       dataIndex: 'category',
       key: 'category',
       width: 95,
+      responsive: ['md'],
       render: (cat) => <Tag style={{ margin: 0 }}>{CATEGORY_LABELS[cat] || 'Khác'}</Tag>
     },
     {
@@ -150,6 +152,7 @@ const SupportManager = () => {
       dataIndex: 'images',
       key: 'images',
       width: 90,
+      responsive: ['sm'],
       render: (images, record) => images?.length ? (
         <Image.PreviewGroup>
           <Space size={4} wrap>
@@ -174,6 +177,7 @@ const SupportManager = () => {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 110,
+      responsive: ['md'],
       render: (date) => (
         <div style={{ fontSize: 12, lineHeight: 1.3 }}>
           <div style={{ color: '#0F172A', fontWeight: 500 }}>{new Date(date).toLocaleDateString('vi-VN')}</div>
@@ -189,6 +193,25 @@ const SupportManager = () => {
       render: (status) => {
         const cfg = STATUS_TAGS[status];
         return cfg ? <Tag color={cfg.color} style={{ margin: 0 }}>{cfg.text}</Tag> : <Tag style={{ margin: 0 }}>{status}</Tag>;
+      }
+    },
+    {
+      title: 'Chi phí xử lý',
+      key: 'repairCost',
+      width: 140,
+      responsive: ['lg'],
+      render: (_, record) => {
+        if (!record.repairCost) return <span style={{ color: '#94A3B8', fontSize: 12 }}>—</span>;
+        return (
+          <div>
+            <div style={{ fontWeight: 600, color: '#0F172A', fontSize: 13 }}>
+              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(record.repairCost)}
+            </div>
+            <Tag color={record.chargeToTenant ? 'orange' : 'cyan'} style={{ marginTop: 2, fontSize: 11 }}>
+              {record.chargeToTenant ? 'Phụ thu phòng' : 'Chủ nhà chịu'}
+            </Tag>
+          </div>
+        );
       }
     },
     {
@@ -244,50 +267,63 @@ const SupportManager = () => {
         description="Theo dõi và cập nhật tiến độ khắc phục báo hỏng từ khách thuê."
       />
 
-      {/* Thanh bộ lọc tách biệt riêng phía trên Card/Bảng */}
-      <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
-        <Input.Search
-          allowClear
-          placeholder="Tìm tên khách, SĐT, số phòng, mô tả"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: 260 }}
-        />
-        <Select
-          data-testid="support-building-filter"
-          allowClear
-          placeholder="Tất cả tòa nhà"
-          value={buildingId}
-          onChange={(v) => setBuildingId(v ?? null)}
-          options={buildingOptions}
-          style={{ width: 160 }}
-        />
-        <Select
-          data-testid="support-status-filter"
-          allowClear
-          placeholder="Tất cả trạng thái"
-          value={statusFilter}
-          onChange={(v) => setStatusFilter(v ?? null)}
-          options={Object.entries(STATUS_TAGS).map(([value, cfg]) => ({ value, label: cfg.text }))}
-          style={{ width: 160 }}
-        />
-        <Select
-          allowClear
-          placeholder="Tất cả mức độ"
-          value={severityFilter}
-          onChange={(v) => setSeverityFilter(v ?? null)}
-          options={Object.entries(SEVERITY_TAGS).map(([value, cfg]) => ({ value, label: cfg.text }))}
-          style={{ width: 150 }}
-        />
-        <Select
-          allowClear
-          placeholder="Tất cả loại sự cố"
-          value={categoryFilter}
-          onChange={(v) => setCategoryFilter(v ?? null)}
-          options={Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))}
-          style={{ width: 160 }}
-        />
-      </div>
+      {/* Thanh bộ lọc đáp ứng (Desktop: dàn ngang; Mobile: Ô tìm kiếm + Nút Bộ lọc gọn gàng) */}
+      <ResponsiveFilterBar
+        search={{
+          value: search,
+          onChange: (e) => setSearch(e.target.value),
+          placeholder: 'Tìm tên khách, SĐT, số phòng, mô tả',
+          'data-testid': 'support-search-input',
+          width: 260
+        }}
+        filters={[
+          {
+            key: 'buildingId',
+            label: 'Tòa nhà',
+            value: buildingId,
+            onChange: (v) => setBuildingId(v ?? null),
+            options: buildingOptions,
+            placeholder: 'Tất cả tòa nhà',
+            'data-testid': 'support-building-filter',
+            width: 160
+          },
+          {
+            key: 'statusFilter',
+            label: 'Trạng thái',
+            value: statusFilter,
+            onChange: (v) => setStatusFilter(v ?? null),
+            options: Object.entries(STATUS_TAGS).map(([value, cfg]) => ({ value, label: cfg.text })),
+            placeholder: 'Tất cả trạng thái',
+            'data-testid': 'support-status-filter',
+            width: 160
+          },
+          {
+            key: 'severityFilter',
+            label: 'Mức độ',
+            value: severityFilter,
+            onChange: (v) => setSeverityFilter(v ?? null),
+            options: Object.entries(SEVERITY_TAGS).map(([value, cfg]) => ({ value, label: cfg.text })),
+            placeholder: 'Tất cả mức độ',
+            width: 150
+          },
+          {
+            key: 'categoryFilter',
+            label: 'Loại sự cố',
+            value: categoryFilter,
+            onChange: (v) => setCategoryFilter(v ?? null),
+            options: Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
+            placeholder: 'Tất cả loại sự cố',
+            width: 160
+          }
+        ]}
+        onReset={() => {
+          setSearch('');
+          setBuildingId(null);
+          setStatusFilter(null);
+          setSeverityFilter(null);
+          setCategoryFilter(null);
+        }}
+      />
 
       <Card
         title={<span className="card-title"><Wrench size={18} color="#0F766E" aria-hidden="true" /> Danh sách sự cố</span>}
@@ -299,7 +335,7 @@ const SupportManager = () => {
           loading={loading}
           rowKey="id"
           pagination={{ pageSize: 8, showSizeChanger: false, showTotal: (total) => `Tổng ${total} sự cố` }}
-          scroll={{ x: 980 }}
+          scroll={{ x: 650 }}
           locale={{ emptyText: 'Chưa có báo cáo sự cố nào' }}
         />
       </Card>
@@ -311,16 +347,17 @@ const SupportManager = () => {
         cancelText="Hủy"
         confirmLoading={actionId === resolving?.id}
         onCancel={() => setResolving(null)}
-        onOk={() => resolveForm.validateFields().then(async ({ landlordNote, repairCost }) => {
+        onOk={() => resolveForm.validateFields().then(async ({ landlordNote, repairCost, chargeToTenant }) => {
           await handleUpdateStatus(resolving.id, 'resolved', {
             landlordNote: landlordNote || undefined,
             repairCost: repairCost ?? undefined,
+            chargeToTenant: Boolean(chargeToTenant),
           });
           setResolving(null);
         })}
         forceRender
       >
-        <Form form={resolveForm} layout="vertical" name="resolveSupport">
+        <Form form={resolveForm} layout="vertical" name="resolveSupport" initialValues={{ chargeToTenant: false }}>
           <Form.Item name="landlordNote" label="Ghi chú xử lý">
             <Input.TextArea rows={3} maxLength={1000} placeholder="Ví dụ: Đã thay vòi nước mới" />
           </Form.Item>
@@ -332,7 +369,14 @@ const SupportManager = () => {
               style={{ width: '100%' }}
               formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
               parser={(v) => v.replace(/\./g, '')}
+              placeholder="0"
             />
+          </Form.Item>
+          <Form.Item name="chargeToTenant" label="Bên chi trả chi phí">
+            <Radio.Group style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Radio value={false}>Chủ nhà thanh toán (ghi nhận vào chi phí bảo dưỡng)</Radio>
+              <Radio value={true}>Phụ thu vào hóa đơn phòng tiếp theo của khách thuê</Radio>
+            </Radio.Group>
           </Form.Item>
         </Form>
       </Modal>

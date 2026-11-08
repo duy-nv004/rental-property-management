@@ -139,11 +139,11 @@ test.describe('Khách thuê: nhiều hợp đồng', () => {
     });
 
     await page.goto('/tenant/contract');
-    await expect(page.getByText('HĐ-11-101')).toBeVisible();
+    await expect(page.getByText('Phòng 101')).toBeVisible();
     await expect(page.getByText('Bạn có hợp đồng khác đang chờ ký')).toBeVisible();
 
     await page.getByRole('button', { name: 'Xem hợp đồng chờ ký' }).click();
-    await expect(page.getByText('HĐ-21-202')).toBeVisible();
+    await expect(page.getByText('Phòng 202')).toBeVisible();
     await expect(page.getByText('Hợp đồng đang chờ bạn ký nhận')).toBeVisible();
 
     await page.getByRole('button', { name: /^Từ chối$/ }).click();

@@ -169,6 +169,20 @@ export const responsiveFixtures = {
   'GET /admin/tickets': tickets,
   'GET /auth/plans': plans,
   'GET /auth/profile': landlordProfile,
+  'POST /auth/upgrade-request': {
+    message: 'Tạo yêu cầu nâng cấp thành công',
+    request: {
+      id: 99,
+      planName: 'pro',
+      billingCycle: 'monthly',
+      amount: 199000,
+      status: 'pending',
+      qrCodeUrl: 'https://img.vietqr.io/image/MB-0123456789-compact.png',
+      accountNumber: '0123456789',
+      accountName: 'HOME SYNC',
+      paymentCode: 'SEPAY 99',
+    }
+  },
   'GET /sepay/config': { bankId: 'MB', bankAccount: '0123456789', bankName: 'MB Bank' },
   'GET /manage/buildings': buildings,
   'GET /manage/rooms': rooms,

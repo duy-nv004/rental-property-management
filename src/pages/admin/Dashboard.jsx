@@ -8,12 +8,12 @@ import PageHeader from '../../components/admin/PageHeader';
 // ─── Sub-components ─────────────────────────────────────────────────────────────
 
 const StatCard = ({ title, value, subtitle, icon, tint }) => (
-  <Card className="stat-card">
+  <Card className="stat-card mobile-compact">
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
       <div style={{ minWidth: 0 }}>
         <div className="stat-label">{title}</div>
         <div className="stat-value">{value}</div>
-        {subtitle && <div className="stat-sub">{subtitle}</div>}
+        {subtitle && <div className="stat-sub stat-note">{subtitle}</div>}
       </div>
       <div className="stat-icon" style={{ background: tint.bg, color: tint.fg }} aria-hidden="true">{icon}</div>
     </div>
@@ -132,9 +132,9 @@ const Dashboard = () => {
 
   const statCards = [
     {
-      title: 'Doanh thu ước tính (theo gói đang hoạt động)',
+      title: 'Doanh thu ước tính (MRR)',
       value: new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(stats.totalRevenue) || 0),
-      subtitle: 'Từ gói chủ nhà (MRR)',
+      subtitle: 'Từ gói chủ nhà đang hoạt động',
       icon: <Wallet size={20} />,
       tint: { bg: '#F0FDFA', fg: '#0F766E' },
     },

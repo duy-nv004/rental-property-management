@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Avatar, Badge, Popover, Button, Empty } from 'antd';
+import { Avatar, Badge, Popover, Button, Empty, Drawer } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { Bell, LogOut, Building2, Menu as MenuIcon } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
@@ -85,6 +85,31 @@ const AppHeader = ({ isMobile, onMenuClick, roleLabel, profilePath, withNotifica
     performLogout(axiosInstance, navigate);
   };
 
+  const renderNotificationList = (onItemClick) => (
+    notifications.length === 0 ? (
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có thông báo nào" />
+    ) : (
+      notifications.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={`notif-item${item.isRead ? '' : ' unread'}`}
+          onClick={() => {
+            if (onItemClick) onItemClick();
+            handleNotificationClick(item);
+          }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, color: '#0F172A' }}>
+            {!item.isRead && <span aria-label="Chưa đọc" style={{ width: 8, height: 8, borderRadius: '50%', background: '#0F766E', flexShrink: 0 }} />}
+            {item.title}
+          </div>
+          <div style={{ fontSize: 13, color: '#475569', marginTop: 2, lineHeight: 1.45 }}>{item.content}</div>
+          <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>{new Date(item.createdAt).toLocaleString('vi-VN')}</div>
+        </button>
+      ))
+    )
+  );
+
   const panel = (
     <div style={{ width: 340, maxWidth: 'calc(100vw - 32px)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, borderBottom: '1px solid #EEF2F6', marginBottom: 8 }}>
@@ -92,20 +117,7 @@ const AppHeader = ({ isMobile, onMenuClick, roleLabel, profilePath, withNotifica
         {unreadCount > 0 && <Button type="link" size="small" onClick={markAllRead}>Đánh dấu đã đọc</Button>}
       </div>
       <div style={{ maxHeight: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {notifications.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có thông báo nào" />
-        ) : (
-          notifications.map((item) => (
-            <button key={item.id} type="button" className={`notif-item${item.isRead ? '' : ' unread'}`} onClick={() => handleNotificationClick(item)}>
-              <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, color: '#0F172A' }}>
-                {!item.isRead && <span aria-label="Chưa đọc" style={{ width: 8, height: 8, borderRadius: '50%', background: '#0F766E', flexShrink: 0 }} />}
-                {item.title}
-              </div>
-              <div style={{ fontSize: 13, color: '#475569', marginTop: 2, lineHeight: 1.45 }}>{item.content}</div>
-              <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>{new Date(item.createdAt).toLocaleString('vi-VN')}</div>
-            </button>
-          ))
-        )}
+        {renderNotificationList()}
       </div>
     </div>
   );
@@ -119,7 +131,9 @@ const AppHeader = ({ isMobile, onMenuClick, roleLabel, profilePath, withNotifica
               <MenuIcon size={22} />
             </button>
           )}
-          <div className="app-brand-mark" style={{ width: 32, height: 32 }}><Building2 size={16} aria-hidden="true" /></div>
+          <div className="app-brand-mark" style={{ width: 32, height: 32, overflow: 'hidden', padding: 0 }}>
+            <img src="/favicon.png" alt="HomeSync Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
           <span className="app-brand-name" style={{ fontSize: 15 }}>HomeSync</span>
         </div>
       ) : (
@@ -128,13 +142,56 @@ const AppHeader = ({ isMobile, onMenuClick, roleLabel, profilePath, withNotifica
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {withNotifications && (
-          <Popover content={panel} trigger="click" open={open} onOpenChange={setOpen} placement="bottomRight" arrow={false}>
-            <button type="button" className="icon-btn" aria-label={`Thông báo, ${unreadCount} chưa đọc`}>
-              <Badge count={unreadCount} overflowCount={99} size="small">
-                <Bell size={20} />
-              </Badge>
-            </button>
-          </Popover>
+          isMobile ? (
+            <>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={`Thông báo, ${unreadCount} chưa đọc`}
+                onClick={() => setOpen(true)}
+              >
+                <Badge count={unreadCount} overflowCount={99} size="small">
+                  <Bell size={20} />
+                </Badge>
+              </button>
+              <Drawer
+                title={
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 16 }}>Thông báo</span>
+                    {unreadCount > 0 && <Button type="link" size="small" onClick={markAllRead}>Đánh dấu đã đọc</Button>}
+                  </div>
+                }
+                placement="bottom"
+                height="70vh"
+                open={open}
+                onClose={() => setOpen(false)}
+                styles={{
+                  body: { padding: '12px 14px', overflowY: 'auto' },
+                  wrapper: { borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {renderNotificationList(() => setOpen(false))}
+                </div>
+              </Drawer>
+            </>
+          ) : (
+            <Popover
+              content={panel}
+              trigger="click"
+              open={open}
+              onOpenChange={setOpen}
+              placement="bottomRight"
+              arrow={false}
+              rootClassName="notification-popover"
+            >
+              <button type="button" className="icon-btn" aria-label={`Thông báo, ${unreadCount} chưa đọc`}>
+                <Badge count={unreadCount} overflowCount={99} size="small">
+                  <Bell size={20} />
+                </Badge>
+              </button>
+            </Popover>
+          )
         )}
 
         <button type="button" className="app-user" onClick={() => profilePath && navigate(profilePath)} aria-label="Hồ sơ cá nhân">

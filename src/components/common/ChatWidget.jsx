@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, X, SendHorizontal, Loader2, Check, Ban, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Bot, Building2, X, SendHorizontal, Loader2, Check, Ban, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import {
   actionCardLabels,
@@ -151,11 +151,33 @@ const ChatWidget = () => {
   return (
     <div className="chat-widget">
       {open && (
-        <section className="chat-panel" role="dialog" aria-label="Trợ lý ảo" data-testid="chat-panel">
+        <section className="chat-panel" role="dialog" aria-label="Trợ lý ảo HomeSync" data-testid="chat-panel">
           <header className="chat-panel-head">
-            <span className="chat-panel-title">
-              <Bot size={18} aria-hidden="true" /> Trợ lý ảo
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                }}
+              >
+                <img src="/favicon.png" alt="HomeSync Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span className="chat-panel-title" style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2 }}>
+                  Trợ lý HomeSync
+                </span>
+                <span style={{ fontSize: 11, color: '#CCFBF1', lineHeight: 1.2 }}>
+                  Hỗ trợ trực tuyến 24/7
+                </span>
+              </div>
+            </div>
             <button type="button" className="icon-btn" aria-label="Đóng trò chuyện" onClick={() => setOpen(false)}>
               <X size={18} aria-hidden="true" />
             </button>

@@ -1,5 +1,5 @@
 import { Menu } from 'antd';
-import { Building2, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axiosInstance from '../../utils/axios';
 import { performLogout } from '../../utils/authSession';
@@ -21,7 +21,9 @@ const SidebarNav = ({ subtitle, items, onNavigate }) => {
   return (
     <nav className="app-sidebar" aria-label="Điều hướng chính">
       <div className="app-brand">
-        <div className="app-brand-mark"><Building2 size={18} aria-hidden="true" /></div>
+        <div className="app-brand-mark" style={{ overflow: 'hidden', padding: 0 }}>
+          <img src="/favicon.png" alt="HomeSync Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
         <div>
           <div className="app-brand-name">HomeSync</div>
           <div className="app-brand-sub">{subtitle}</div>

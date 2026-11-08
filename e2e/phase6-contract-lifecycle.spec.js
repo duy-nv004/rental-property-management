@@ -141,9 +141,9 @@ test.describe('C5: yêu cầu của khách', () => {
       'POST /tenant/contract/11/requests': (r) => json(r, { message: 'Đã gửi yêu cầu tới chủ nhà', request: { id: 6 } }, 201),
     });
     await page.goto('/tenant/contract');
-    await expect(page.getByText('Yêu cầu của tôi')).toBeVisible();
-    await expect(page.getByText('Hết phòng')).toBeVisible();
-    await expect(page.locator('.ant-card', { hasText: 'Tiền cọc' }).getByText('Đang giữ')).toBeVisible();
+    await page.getByRole('button', { name: /Yêu cầu của tôi/ }).click();
+    await expect(page.getByRole('dialog').getByText('Hết phòng')).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Đóng' }).click();
 
     await page.getByRole('button', { name: 'Báo trả phòng' }).click();
     const modal = page.getByRole('dialog');

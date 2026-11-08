@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Button, Avatar, Row, Col, Alert, Form, Input, Divider, message, Spin, List, Tag, Modal, Select, Space } from 'antd';
-import { Phone, Mail, CreditCard, Send, CheckCircle2, Lock, KeyRound } from 'lucide-react';
+import { Phone, Mail, CreditCard, Send, CheckCircle2, Lock, KeyRound, Smartphone } from 'lucide-react';
 import PageHeader from '../../components/admin/PageHeader';
 import '../../styles/tenant.css';
 import axiosInstance from '../../utils/axios';
@@ -202,6 +202,26 @@ const TenantProfile = () => {
                 </Button>
               </>
             )}
+          </Card>
+
+          <Card
+            variant="borderless"
+            className="stat-card"
+            title={<span className="card-title"><Smartphone size={18} color="#0F766E" aria-hidden="true" /> Cài đặt ứng dụng (PWA)</span>}
+            style={{ marginTop: 20 }}
+          >
+            <div style={{ fontSize: 13, color: '#475569', marginBottom: 12 }}>
+              Thêm SmartRental vào màn hình chính điện thoại để xem hóa đơn, thanh toán và báo sự cố phòng chỉ với 1 chạm.
+            </div>
+            <Button
+              type="default"
+              block
+              icon={<Smartphone size={16} />}
+              style={{ borderColor: '#0F766E', color: '#0F766E', fontWeight: 600 }}
+              onClick={() => window.dispatchEvent(new CustomEvent('pwa:open-install-modal'))}
+            >
+              Xem hướng dẫn & Cài đặt App
+            </Button>
           </Card>
         </Col>
 

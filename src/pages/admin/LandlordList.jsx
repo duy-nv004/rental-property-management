@@ -4,6 +4,7 @@ import { Lock, Unlock, Users, CreditCard, BarChart2 } from 'lucide-react';
 import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
+import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -119,12 +120,12 @@ const LandlordList = () => {
             defaultValue={billingCycle}
             onChange={(e) => { billingCycle = e.target.value; }}
             options={[
-              { value: 'monthly', label: 'Theo tháng (30 ngày)' },
-              { value: 'annual', label: 'Theo năm (365 ngày)' },
+              { value: 'monthly', label: 'Tháng' },
+              { value: 'annual', label: 'Năm' },
             ]}
           />
           <div style={{ marginTop: 8, fontSize: 12, color: '#64748B' }}>
-            Đây là cấp gói thủ công (nguồn Admin), không cộng vào doanh thu thực thu SePay.
+            Đây là cấp gói thủ công, không thu tiền (nguồn Admin, không cộng vào doanh thu thực thu SePay).
           </div>
         </div>
       ) : null,
@@ -256,6 +257,7 @@ const LandlordList = () => {
       title: 'Hạn gói',
       key: 'planExpiresAt',
       width: 180,
+      responsive: ['sm'],
       render: (_, record) => {
         if (record.plan === 'FREE') {
           return <Tag color="default">Không thời hạn</Tag>;
@@ -287,6 +289,7 @@ const LandlordList = () => {
       title: 'Ngày tham gia',
       dataIndex: 'date',
       key: 'date',
+      responsive: ['md'],
       render: (date) => <span style={{ color: '#64748B', fontSize: 13 }}>{date}</span>,
     },
     {
@@ -345,34 +348,45 @@ const LandlordList = () => {
         </Col>
       </Row>
 
-      <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
-        <Input.Search
-          placeholder="Tìm theo tên, email hoặc SĐT"
-          allowClear
-          style={{ width: isPhone ? '100%' : 280 }}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        <Select
-          placeholder="Lọc gói cước"
-          allowClear
-          style={{ width: isPhone ? '100%' : 160 }}
-          value={planFilter}
-          onChange={setPlanFilter}
-          options={PLAN_OPTIONS}
-        />
-        <Select
-          placeholder="Lọc trạng thái"
-          allowClear
-          style={{ width: isPhone ? '100%' : 180 }}
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={[
-            { value: 'ACTIVE', label: 'Đang hoạt động' },
-            { value: 'LOCKED', label: 'Bị khóa' },
-          ]}
-        />
-      </div>
+      {/* Thanh bộ lọc đáp ứng chuẩn UI/UX Pro Max */}
+      <ResponsiveFilterBar
+        search={{
+          placeholder: 'Tìm theo tên, email hoặc SĐT',
+          value: searchQuery,
+          onChange: (e) => setSearchQuery(e.target.value),
+          'data-testid': 'landlord-search-input'
+        }}
+        filters={[
+          {
+            key: 'plan',
+            label: 'Gói cước',
+            placeholder: 'Lọc gói cước',
+            value: planFilter,
+            onChange: (v) => setPlanFilter(v ?? null),
+            options: PLAN_OPTIONS,
+            'data-testid': 'landlord-plan-filter',
+            width: 150
+          },
+          {
+            key: 'status',
+            label: 'Trạng thái',
+            placeholder: 'Lọc trạng thái',
+            value: statusFilter,
+            onChange: (v) => setStatusFilter(v ?? null),
+            options: [
+              { value: 'ACTIVE', label: 'Đang hoạt động' },
+              { value: 'LOCKED', label: 'Bị khóa' },
+            ],
+            'data-testid': 'landlord-status-filter',
+            width: 160
+          }
+        ]}
+        onReset={() => {
+          setSearchQuery('');
+          setPlanFilter(null);
+          setStatusFilter(null);
+        }}
+      />
 
       <Card styles={{ body: { padding: 0 } }}>
         <Table

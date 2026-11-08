@@ -256,9 +256,20 @@ const TenantSupport = () => {
                         </Image.PreviewGroup>
                       )}
                       {(item.landlordNote || item.repairCost != null) && (
-                        <div style={{ marginTop: 8, fontSize: 13, color: '#475569' }}>
-                          {item.landlordNote && <div>Phản hồi của chủ nhà: {item.landlordNote}</div>}
-                          {item.repairCost != null && <div>Chi phí sửa: {Number(item.repairCost).toLocaleString('vi-VN')} đ</div>}
+                        <div style={{ marginTop: 10, padding: '10px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, color: '#334155' }}>
+                          {item.landlordNote && (
+                            <div style={{ marginBottom: item.repairCost != null ? 6 : 0 }}>
+                              <b style={{ color: '#0F172A' }}>Phản hồi chủ nhà:</b> {item.landlordNote}
+                            </div>
+                          )}
+                          {item.repairCost != null && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span><b style={{ color: '#0F172A' }}>Chi phí sửa:</b> {Number(item.repairCost).toLocaleString('vi-VN')} đ</span>
+                              <Tag color={item.chargeToTenant ? 'orange' : 'green'} style={{ margin: 0 }}>
+                                {item.chargeToTenant ? 'Phụ thu vào hóa đơn phòng tiếp theo' : 'Chủ nhà hỗ trợ 100%'}
+                              </Tag>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

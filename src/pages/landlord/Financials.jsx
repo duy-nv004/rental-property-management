@@ -1,21 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Select, Spin, message, Alert, Empty } from 'antd';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Wallet, TrendingUp, AlertCircle, Lightbulb, CheckCircle2 } from 'lucide-react';
+import {
+  BarChart, Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
+} from 'recharts';
+import { Wallet, TrendingUp, AlertCircle, Lightbulb, CheckCircle2, Wrench, PiggyBank, Home } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 
 const BAR_COLORS = ['#94A3B8', '#0F766E', '#DC2626'];
 
 const StatCard = ({ label, value, icon, tint, note }) => (
-  <Card className="stat-card">
+  <Card className="stat-card mobile-compact" style={{ height: '100%' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
       <div style={{ minWidth: 0 }}>
         <div className="stat-label">{label}</div>
-        <div className="stat-value" style={{ fontSize: 22 }}>{value}</div>
-        {note && <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>{note}</div>}
+        <div className="stat-value" style={{ fontSize: 22, fontWeight: 700, color: '#0F172A' }}>{value}</div>
+        {note && <div className="stat-note" style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>{note}</div>}
       </div>
-      <div className="stat-icon" style={{ background: tint + '14', color: tint }} aria-hidden="true">{icon}</div>
+      <div className="stat-icon" style={{ background: tint + '18', color: tint, width: 44, height: 44, borderRadius: 10, display: 'grid', placeItems: 'center' }} aria-hidden="true">{icon}</div>
     </div>
   </Card>
 );
@@ -85,18 +87,18 @@ const Financials = () => {
         title="Thống kê tài chính"
         description="Doanh thu, tỷ lệ thu tiền và nợ đọng theo từng kỳ."
         extra={
-          <div className="toolbar-wrap">
+          <div className="financial-period-bar">
             <Select
               aria-label="Chọn tháng"
               value={selectedMonth}
-              style={{ minWidth: 120 }}
+              style={{ minWidth: 100 }}
               onChange={setSelectedMonth}
               options={[
                 { value: 'all', label: 'Cả năm' },
                 ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
               ]}
             />
-            <Select aria-label="Chọn năm" value={selectedYear} style={{ minWidth: 120 }} onChange={setSelectedYear} options={yearOptions} />
+            <Select aria-label="Chọn năm" value={selectedYear} style={{ minWidth: 100 }} onChange={setSelectedYear} options={yearOptions} />
           </div>
         }
       />
@@ -105,8 +107,8 @@ const Financials = () => {
         <div style={{ display: 'grid', placeItems: 'center', height: '50vh' }}><Spin size="large" /></div>
       ) : (
         <>
-          <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-            <Col xs={24} md={8}>
+          <Row gutter={[{ xs: 8, sm: 16 }, { xs: 8, sm: 16 }]} style={{ marginBottom: 16 }}>
+            <Col xs={12} sm={12} md={8}>
               <StatCard
                 label="Tổng doanh thu kỳ vọng"
                 value={formatVND(stats?.totalExpected)}
@@ -115,7 +117,7 @@ const Financials = () => {
                 note="Tổng hóa đơn đã xuất trong kỳ"
               />
             </Col>
-            <Col xs={24} md={8}>
+            <Col xs={12} sm={12} md={8}>
               <StatCard
                 label="Đã thu thực tế"
                 value={formatVND(stats?.totalCollected)}
@@ -124,7 +126,7 @@ const Financials = () => {
                 note={`Hiệu suất thu tiền: ${collectionRate}%`}
               />
             </Col>
-            <Col xs={24} md={8}>
+            <Col xs={12} sm={12} md={8}>
               <StatCard
                 label="Tiền phòng nợ đọng"
                 value={formatVND(stats?.unpaidAmount)}
@@ -133,7 +135,62 @@ const Financials = () => {
                 note={`${stats?.unpaidRooms ?? 0} phòng chưa hoàn tất thanh toán`}
               />
             </Col>
+            <Col xs={12} sm={12} md={8}>
+              <StatCard
+                label="Chi phí sửa chữa/bảo dưỡng"
+                value={formatVND(stats?.totalRepairCost)}
+                icon={<Wrench size={20} />}
+                tint="#EA580C"
+                note="Chi phí chủ trọ chi trả trong kỳ"
+              />
+            </Col>
+            <Col xs={12} sm={12} md={8}>
+              <StatCard
+                label="Lợi nhuận ròng (Net Profit)"
+                value={formatVND(stats?.netProfit)}
+                icon={<PiggyBank size={20} />}
+                tint="#15803D"
+                note="Tiền thực thu trừ chi phí sửa chữa"
+              />
+            </Col>
+            <Col xs={12} sm={12} md={8}>
+              <StatCard
+                label="Tỷ lệ lấp đầy phòng"
+                value={`${stats?.occupancyRate ?? 0}%`}
+                icon={<Home size={20} />}
+                tint="#7C3AED"
+                note={stats?.totalRooms ? `${stats?.occupiedRooms ?? 0}/${stats.totalRooms} phòng đang có khách` : "Tỷ lệ phòng đang có khách thuê"}
+              />
+            </Col>
           </Row>
+
+          {/* Biểu đồ xu hướng 12 tháng */}
+          {Array.isArray(stats?.trend12Months) && stats.trend12Months.length > 0 && (
+            <Card
+              title={<span className="card-title">Xu hướng doanh thu & lợi nhuận 12 tháng năm {selectedYear}</span>}
+              style={{ marginBottom: 20 }}
+            >
+              <div className="financial-chart-container" role="img" aria-label="Biểu đồ xu hướng 12 tháng">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={stats.trend12Months} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEF2F6" />
+                    <XAxis dataKey="month" tickFormatter={(m) => `Tháng ${m}`} tick={{ fill: '#475569', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#64748B', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(val) => val ? (val / 1000000).toFixed(0) + 'M' : '0'} />
+                    <Tooltip
+                      formatter={(val, name) => [formatVND(val), name === 'collected' ? 'Đã thu' : name === 'repairCost' ? 'Chi phí sửa chữa' : name === 'profit' ? 'Lợi nhuận ròng' : 'Kỳ vọng']}
+                      labelFormatter={(label) => `Tháng ${label}/${selectedYear}`}
+                    />
+                    <Legend
+                      formatter={(value) => value === 'collected' ? 'Đã thu thực tế' : value === 'repairCost' ? 'Chi phí sửa chữa' : value === 'profit' ? 'Lợi nhuận ròng' : value}
+                    />
+                    <Bar dataKey="collected" fill="#0F766E" radius={[4, 4, 0, 0]} barSize={24} name="collected" />
+                    <Bar dataKey="repairCost" fill="#EA580C" radius={[4, 4, 0, 0]} barSize={24} name="repairCost" />
+                    <Line type="monotone" dataKey="profit" stroke="#15803D" strokeWidth={3} dot={{ r: 4, fill: '#15803D' }} name="profit" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          )}
 
           <Row gutter={[20, 20]}>
             <Col xs={24} lg={14}>

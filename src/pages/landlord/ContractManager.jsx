@@ -9,6 +9,7 @@ import { contractFilterKeys, filterContracts, compareEndDate, parseInventory, bu
 
 import { useState, useEffect } from 'react';
 import SignaturePadModal from '../../components/common/SignaturePadModal';
+import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
 
 // 2 ô ảnh CCCD bắt buộc (minh chứng tạm trú), dùng chung cho form thêm người ở của chủ nhà và khách
 export const CccdUploadFields = () => (
@@ -701,6 +702,7 @@ const ContractManager = () => {
       title: 'THỜI HẠN THUÊ',
       key: 'period',
       width: 160,
+      responsive: ['md'],
       render: (_, record) => {
         if (!record.startDate || !record.endDate) return 'N/A';
         const start = new Date(record.startDate).toLocaleDateString('vi-VN');
@@ -713,6 +715,7 @@ const ContractManager = () => {
       dataIndex: 'deposit', 
       key: 'deposit',
       width: 120,
+      responsive: ['sm'],
       render: (deposit) => <b>{formatVND(deposit)}</b> 
     },
     { 
@@ -843,43 +846,51 @@ const ContractManager = () => {
         }
       />
 
-      {/* Thanh bộ lọc tách biệt riêng phía trên Card/Bảng */}
-      <div className="toolbar-wrap" style={{ marginBottom: 16 }}>
-        <Input.Search
-          allowClear
-          placeholder="Tìm tên khách, SĐT, số phòng"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: 260 }}
-        />
-        <Select
-          data-testid="contract-building-filter"
-          allowClear
-          placeholder="Tất cả tòa nhà"
-          value={filterBuildingId}
-          onChange={(v) => setFilterBuildingId(v ?? null)}
-          options={buildings.map((b) => ({ value: b.id, label: b.name }))}
-          style={{ width: 180 }}
-        />
-        <Select
-          data-testid="contract-status-filter"
-          allowClear
-          placeholder="Tất cả trạng thái"
-          value={filterStatus}
-          onChange={(v) => setFilterStatus(v ?? null)}
-          options={[
-            { value: 'active', label: 'Đang hoạt động' },
-            { value: 'expiring', label: 'Sắp hết hạn' },
-            { value: 'overdue', label: 'Quá hạn' },
-            { value: 'pending_tenant_signature', label: 'Chờ khách ký' },
-            { value: 'renewed', label: 'Đã gia hạn' },
-            { value: 'terminated', label: 'Đã thanh lý' },
-            { value: 'cancelled', label: 'Đã hủy' },
-            { value: 'rejected', label: 'Bị từ chối' },
-          ]}
-          style={{ width: 180 }}
-        />
-      </div>
+      {/* Thanh bộ lọc đáp ứng chuẩn UI/UX Pro Max */}
+      <ResponsiveFilterBar
+        search={{
+          placeholder: 'Tìm tên khách, SĐT, số phòng',
+          value: search,
+          onChange: (e) => setSearch(e.target.value),
+          'data-testid': 'contract-search-input'
+        }}
+        filters={[
+          {
+            key: 'buildingId',
+            label: 'Tất cả tòa nhà',
+            placeholder: 'Tất cả tòa nhà',
+            value: filterBuildingId,
+            onChange: (v) => setFilterBuildingId(v ?? null),
+            options: buildings.map((b) => ({ value: b.id, label: b.name })),
+            'data-testid': 'contract-building-filter',
+            width: 180
+          },
+          {
+            key: 'status',
+            label: 'Tất cả trạng thái',
+            placeholder: 'Tất cả trạng thái',
+            value: filterStatus,
+            onChange: (v) => setFilterStatus(v ?? null),
+            options: [
+              { value: 'active', label: 'Đang hoạt động' },
+              { value: 'expiring', label: 'Sắp hết hạn' },
+              { value: 'overdue', label: 'Quá hạn' },
+              { value: 'pending_tenant_signature', label: 'Chờ khách ký' },
+              { value: 'renewed', label: 'Đã gia hạn' },
+              { value: 'terminated', label: 'Đã thanh lý' },
+              { value: 'cancelled', label: 'Đã hủy' },
+              { value: 'rejected', label: 'Bị từ chối' },
+            ],
+            'data-testid': 'contract-status-filter',
+            width: 180
+          }
+        ]}
+        onReset={() => {
+          setSearch('');
+          setFilterBuildingId(null);
+          setFilterStatus(null);
+        }}
+      />
 
       <Card
         variant="borderless"

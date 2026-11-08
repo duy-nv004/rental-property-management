@@ -18,12 +18,13 @@ export const normalizeText = (s) =>
     .toLowerCase()
     .trim();
 
-/** Chờ xử lý → đang sửa → đã xong; cùng trạng thái thì nghiêm trọng trước, rồi mới nhất trước. */
+/** Sắp xếp sự cố theo thời gian mới nhất lên trước (createdAt DESC). */
 export const sortSupportRequests = (list) =>
-  [...(Array.isArray(list) ? list : [])].sort((a, b) =>
-    rank(STATUS_ORDER, a.status) - rank(STATUS_ORDER, b.status)
-    || rank(SEVERITY_ORDER, a.severity) - rank(SEVERITY_ORDER, b.severity)
-    || new Date(b.createdAt) - new Date(a.createdAt));
+  [...(Array.isArray(list) ? list : [])].sort((a, b) => {
+    const timeA = new Date(a?.createdAt || 0).getTime();
+    const timeB = new Date(b?.createdAt || 0).getTime();
+    return timeB - timeA || (b?.id || 0) - (a?.id || 0);
+  });
 
 export const supportStats = (list) => {
   const stats = { total: 0, pending: 0, inProgress: 0, resolved: 0, highOpen: 0 };

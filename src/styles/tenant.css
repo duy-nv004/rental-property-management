@@ -13,4 +13,89 @@
   .tenant-page .ant-card-extra .ant-btn { min-height: 44px; }
   /* Tiêu đề card + nút extra xuống dòng khi chật */
   .tenant-page .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; padding-block: 8px; }
+  .tenant-page.page-shell,
+  .tenant-page.page-shell-doc {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .tenant-page .page-header {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .tenant-page .page-header .ant-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .tenant-page .ant-card-head {
+    padding: 12px 16px !important;
+  }
+  .tenant-page .ant-card-head-wrapper {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .tenant-page .ant-card-extra {
+    margin-inline-start: 0 !important;
+    width: 100% !important;
+  }
+  .tenant-page .ant-card-extra .ant-space {
+    width: 100% !important;
+  }
+  .tenant-page .ant-card-extra .ant-select {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .tenant-page .ant-card-extra .ant-btn {
+    width: 100% !important;
+  }
+
+  /* Chi tiết hợp đồng (Document view) trên điện thoại */
+  .tenant-page .doc-card.ant-card .ant-card-body {
+    padding: 14px !important;
+  }
+  .tenant-page .doc-status {
+    position: static !important;
+    margin-bottom: 12px !important;
+  }
+  .tenant-page .doc-head {
+    padding-right: 0 !important;
+  }
+  .tenant-page .price-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .tenant-page .price-value {
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+}
+
+/* In ấn hợp đồng dạng giấy (A4 Clean Print) */
+@media print {
+  nav, aside, header, .app-sidebar, .app-header, .page-header, .alert-block, .tenant-actions, .chat-launcher, .chat-widget, button {
+    display: none !important;
+  }
+  body, .ant-layout, .page-shell, .tenant-page {
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .printable-contract.paper {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+  .printable-contract .sign-pending-actions {
+    display: none !important;
+  }
 }

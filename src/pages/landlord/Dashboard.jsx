@@ -132,17 +132,19 @@ const LandlordDashboard = () => {
         description="Theo dõi thông số vận hành và doanh thu khu trọ của bạn."
         extra={
           <div className="toolbar-wrap">
-            <Select
-              aria-label="Chọn tháng"
-              value={selectedMonth}
-              style={{ minWidth: 120 }}
-              onChange={setSelectedMonth}
-              options={[
-                { value: 'all', label: 'Cả năm' },
-                ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
-              ]}
-            />
-            <Select aria-label="Chọn năm" value={selectedYear} style={{ minWidth: 120 }} onChange={setSelectedYear} options={yearOptions} />
+            <div className="financial-period-bar">
+              <Select
+                aria-label="Chọn tháng"
+                value={selectedMonth}
+                style={{ minWidth: 110, width: '100%' }}
+                onChange={setSelectedMonth}
+                options={[
+                  { value: 'all', label: 'Cả năm' },
+                  ...Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Tháng ${i + 1}` }))
+                ]}
+              />
+              <Select aria-label="Chọn năm" value={selectedYear} style={{ minWidth: 100, width: '100%' }} onChange={setSelectedYear} options={yearOptions} />
+            </div>
             <Button type="primary" icon={<Zap size={16} />} onClick={() => navigate('/landlord/utilities')}>
               Chốt điện nước
             </Button>
@@ -252,7 +254,7 @@ const LandlordDashboard = () => {
           scroll={{ x: 760 }}
           locale={{ emptyText: 'Chưa có báo cáo sự cố nào' }}
           columns={[
-            { title: 'Thời gian', dataIndex: 'time', width: 160, render: (t) => <span style={{ color: '#475569' }}>{t}</span> },
+            { title: 'Thời gian', dataIndex: 'time', width: 160, responsive: ['md'], render: (t) => <span style={{ color: '#475569' }}>{t}</span> },
             { title: 'Phòng', dataIndex: 'roomNumber', width: 100, render: (room) => <Tag color="cyan">P.{room}</Tag> },
             { title: 'Mô tả', dataIndex: 'desc', ellipsis: true },
             {

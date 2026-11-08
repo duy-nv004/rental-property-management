@@ -9,31 +9,27 @@ import { sortSupportRequests, supportStats, filterSupportRequests } from './supp
 const r = (id, status, severity, createdAt, extra = {}) => ({ id, status, severity, createdAt, ...extra });
 
 describe('sortSupportRequests', () => {
-  test('chờ xử lý lên đầu, rồi đang sửa, đã xong xuống cuối', () => {
+  test('sự cố có thời gian mới hơn lên đầu, không bị đẩy xuống dưới khi trạng thái đã xong (resolved)', () => {
     const list = [
-      r(1, 'resolved', 'high', '2026-10-05'),
-      r(2, 'in_progress', 'low', '2026-10-01'),
-      r(3, 'pending', 'low', '2026-10-01'),
+      r(1, 'pending', 'low', '2026-10-01'),
+      r(2, 'in_progress', 'low', '2026-10-03'),
+      r(3, 'resolved', 'high', '2026-10-05'),
     ];
+    // Sự cố 3 (đã xong nhưng mới nhất 05/10) phải ở đầu, sau đó đến 2 (03/10), cuối cùng là 1 (01/10)
     assert.deepEqual(sortSupportRequests(list).map(x => x.id), [3, 2, 1]);
   });
 
-  test('cùng trạng thái thì mức nghiêm trọng cao lên trước', () => {
+  test('cùng thời gian tạo thì ưu tiên ID lớn hơn (mới tạo sau)', () => {
     const list = [
-      r(1, 'pending', 'low', '2026-10-05'),
-      r(2, 'pending', 'high', '2026-10-01'),
-      r(3, 'pending', 'medium', '2026-10-03'),
+      r(1, 'pending', 'low', '2026-10-01'),
+      r(5, 'resolved', 'high', '2026-10-01'),
+      r(3, 'in_progress', 'medium', '2026-10-01'),
     ];
-    assert.deepEqual(sortSupportRequests(list).map(x => x.id), [2, 3, 1]);
-  });
-
-  test('cùng trạng thái và mức độ thì mới nhất lên trước', () => {
-    const list = [r(1, 'pending', 'high', '2026-10-01'), r(2, 'pending', 'high', '2026-10-09')];
-    assert.deepEqual(sortSupportRequests(list).map(x => x.id), [2, 1]);
+    assert.deepEqual(sortSupportRequests(list).map(x => x.id), [5, 3, 1]);
   });
 
   test('không làm thay đổi mảng gốc', () => {
-    const list = [r(1, 'resolved', 'low', '2026-10-01'), r(2, 'pending', 'high', '2026-10-01')];
+    const list = [r(1, 'resolved', 'low', '2026-10-01'), r(2, 'pending', 'high', '2026-10-05')];
     sortSupportRequests(list);
     assert.deepEqual(list.map(x => x.id), [1, 2]);
   });

@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Spin, Row, Col, Divider, Tag, Empty, Button, Alert, message, Input, Modal, Select, DatePicker, List, Space } from 'antd';
 import dayjs from 'dayjs';
-import { FileSignature, ShieldCheck, CheckSquare, Clock, AlertTriangle, XCircle, Zap, Droplets, Wifi, Sparkles } from 'lucide-react';
+import { FileSignature, ShieldCheck, Clock, AlertTriangle, XCircle, Printer, History } from 'lucide-react';
 import '../../styles/tenant.css';
 import axiosInstance from '../../utils/axios';
 import SignaturePadModal from '../../components/common/SignaturePadModal';
 import { expiryTag } from '../landlord/ContractManager';
+import { parseInventory } from '../../utils/contracts';
 
 const CONTRACT_STATUS_LABEL = {
   active: 'Đang hiệu lực',
@@ -52,6 +53,7 @@ const TenantContract = () => {
   const [requestDate, setRequestDate] = useState(null);
   const [requestNote, setRequestNote] = useState('');
   const [requestLoading, setRequestLoading] = useState(false);
+  const [requestsModalVisible, setRequestsModalVisible] = useState(false);
 
   const fetchRequests = useCallback(async () => {
     try {
@@ -172,16 +174,18 @@ const TenantContract = () => {
           <p className="page-header-desc">Thông tin chi tiết các điều khoản và lịch sử hợp đồng thuê phòng của bạn.</p>
         </div>
         {data.contracts?.length > 0 && (
-          <Select
-            aria-label="Lịch sử hợp đồng"
-            style={{ minWidth: 260, maxWidth: '100%' }}
-            value={contract?.id}
-            onChange={setSelectedContractId}
-            options={data.contracts.map(c => ({
-              value: c.id,
-              label: `HĐ #${c.id} · Phòng ${c.roomNumber} (${c.buildingName}) — ${CONTRACT_STATUS_LABEL[c.status] || c.status}`
-            }))}
-          />
+          <div style={{ width: '100%', maxWidth: 360, minWidth: 0 }}>
+            <Select
+              aria-label="Lịch sử hợp đồng"
+              style={{ width: '100%' }}
+              value={contract?.id}
+              onChange={setSelectedContractId}
+              options={data.contracts.map(c => ({
+                value: c.id,
+                label: `HĐ #${c.id} · Phòng ${c.roomNumber} (${c.buildingName}) — ${CONTRACT_STATUS_LABEL[c.status] || c.status}`
+              }))}
+            />
+          </div>
         )}
       </div>
 
@@ -277,46 +281,25 @@ const TenantContract = () => {
         </Card>
       )}
 
-      {/* YÊU CẦU & TIỀN CỌC (C5) */}
-      {hasActiveContract && !isTerminated && (
-        <Space className="tenant-actions" style={{ marginBottom: 16 }} wrap>
-          <Button onClick={() => openRequest('move_out')}>Báo trả phòng</Button>
-          <Button onClick={() => openRequest('renewal')}>Đề nghị gia hạn</Button>
-        </Space>
-      )}
-      {requests.length > 0 && (
-        <Card title="Yêu cầu của tôi" variant="borderless" style={{ marginBottom: 16 }}>
-          <List
-            dataSource={requests}
-            renderItem={(r) => (
-              <List.Item>
-                <div>
-                  <b>{REQUEST_TYPE_LABELS[r.type] || r.type}</b> · ngày {formatDate(r.desiredDate)}
-                  {r.note && <div className="cell-sub">{r.note}</div>}
-                  {r.responseNote && <div className="cell-sub">Chủ nhà: {r.responseNote}</div>}
-                </div>
-                <Tag color={REQUEST_STATUS[r.status]?.color}>{REQUEST_STATUS[r.status]?.text || r.status}</Tag>
-              </List.Item>
-            )}
-          />
-        </Card>
-      )}
-      {contract?.deposits?.length > 0 && (
-        <Card title="Tiền cọc" variant="borderless" style={{ marginBottom: 16 }}>
-          {contract.deposits.map((d, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <Tag color={DEPOSIT_STATUS[d.status]?.color}>{DEPOSIT_STATUS[d.status]?.text || d.status}</Tag>
-              {formatVND(d.amount)}
-              {d.status !== 'held' && <> · đã hoàn {formatVND(d.refundedAmount)} · khấu trừ {formatVND(d.deductedAmount)}</>}
-              {d.note && <div className="cell-sub">{d.note}</div>}
-            </div>
-          ))}
-        </Card>
-      )}
+      {/* THAO TÁC HỢP ĐỒNG & YÊU CẦU CỦA KHÁCH */}
+      <Space className="tenant-actions" style={{ marginBottom: 16 }} wrap>
+        {hasActiveContract && !isTerminated && (
+          <>
+            <Button onClick={() => openRequest('move_out')}>Báo trả phòng</Button>
+            <Button onClick={() => openRequest('renewal')}>Đề nghị gia hạn</Button>
+          </>
+        )}
+        <Button
+          icon={<History size={15} aria-hidden="true" />}
+          onClick={() => setRequestsModalVisible(true)}
+        >
+          Yêu cầu của tôi {requests.length > 0 ? `(${requests.length})` : ''}
+        </Button>
+      </Space>
 
-      {/* CONTRACT CARD */}
-      <Card className="doc-card" variant="borderless">
-        <div className="doc-status">
+      {/* KHUNG TRẠNG THÁI & NÚT IN HỢP ĐỒNG */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {isTerminated ? (
             <Tag color="default" className="tag-flat tag-icon">
               Đã thanh lý
@@ -335,221 +318,165 @@ const TenantContract = () => {
           )}
         </div>
 
-        <div className="doc-head">
-          <div className="info-icon">
-            <FileSignature size={22} aria-hidden="true" />
+        <Button
+          type="default"
+          icon={<Printer size={15} aria-hidden="true" />}
+          onClick={() => window.print()}
+          style={{ minHeight: 40 }}
+        >
+          In hợp đồng
+        </Button>
+      </div>
+
+      {/* BẢN HỢP ĐỒNG DẠNG GIẤY (LIVE PAPER CONTRACT) */}
+      <div className="printable-contract paper doc-paper" style={{ marginBottom: 24 }}>
+
+        <div className="paper-national">
+          <strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><br />
+          <strong>Độc lập - Tự do - Hạnh phúc</strong>
+          <div className="paper-national-line" />
+        </div>
+
+        <div className="paper-heading">
+          <h2 className="paper-title">HỢP ĐỒNG CHO THUÊ PHÒNG TRỌ</h2>
+          <small className="paper-basis">Căn cứ Bộ luật Dân sự nước Cộng hòa Xã hội Chủ nghĩa Việt Nam.</small>
+        </div>
+
+        <p>Hôm nay, ngày {contract.startDate ? new Date(contract.startDate).getDate() : '...'} tháng {contract.startDate ? new Date(contract.startDate).getMonth() + 1 : '...'} năm {contract.startDate ? new Date(contract.startDate).getFullYear() : '...'}, chúng tôi gồm có:</p>
+
+        <div className="paper-section">
+          <strong>BÊN A: BÊN CHO THUÊ (PHÒNG TRỌ)</strong><br />
+          - Họ và Tên: {contract.landlordName || landlord?.name || 'N/A'}<br />
+          - Điện thoại: {contract.landlordPhone || landlord?.phone || 'N/A'}<br />
+          - CCCD số: {contract.landlordCccd || 'Chưa cung cấp'}<br />
+          - HK thường trú: {contract.landlordHometown || 'N/A'}<br />
+          - Địa chỉ bàn giao phòng thuê: {contract.landlordAddress || building?.address || 'N/A'}
+        </div>
+
+        <div className="paper-section">
+          <strong>BÊN B: BÊN THUÊ (PHÒNG TRỌ)</strong><br />
+          - Họ và Tên: {contract.tenantName || profile?.name || 'N/A'}<br />
+          - Điện thoại: {contract.tenantPhone || profile?.phone || 'N/A'}<br />
+          - CCCD số: {contract.tenantCccd || 'Chưa cung cấp'} {contract.tenantDob && ` - Ngày sinh: ${contract.tenantDob}`}<br />
+          - HK thường trú: {contract.tenantHometown || 'N/A'}
+        </div>
+
+        <div className="paper-section">
+          <strong>ĐIỀU 1: ĐỐI TƯỢNG CỦA HỢP ĐỒNG</strong><br />
+          Bên A đồng ý cho bên B thuê phòng trọ số <strong>{room?.roomNumber}</strong> thuộc tòa nhà <strong>{building?.name}</strong>.<br />
+          - Thời hạn thuê phòng là tính từ ngày {formatDate(contract.startDate)} đến ngày {formatDate(contract.endDate)}.<br />
+          - Mục đích thuê để lưu trú sinh hoạt với số lượng người ở thực tế là: {contract.numTenants || 1} người.
+        </div>
+
+        <div className="paper-section">
+          <strong>ĐIỀU 2: GIÁ THUÊ VÀ PHƯƠNG THỨC THANH TOÁN</strong><br />
+          - Hai bên nhất trí giá thuê phòng trọ là: <strong>{formatVND(contract.rentPrice ?? room?.price)}/tháng</strong>.<br />
+          - Tiền đặt cọc phòng: <strong>{formatVND(contract.deposit)}</strong> (Được hoàn trả lại đầy đủ khi kết thúc hợp đồng theo quy định).<br />
+          - Đơn giá dịch vụ tiện ích áp dụng:<br />
+          &nbsp;&nbsp;+ Tiền điện: {formatVND(contract.electricityPrice)} / kWh (Chỉ số đầu: {contract.initialElectricity || 0} kWh)<br />
+          &nbsp;&nbsp;+ Tiền nước: {formatVND(contract.waterPrice)} / m³ (Chỉ số đầu: {contract.initialWater || 0} m³)<br />
+          &nbsp;&nbsp;+ Phí Internet: {formatVND(contract.internetPrice)} / tháng<br />
+          &nbsp;&nbsp;+ Phí vệ sinh dịch vụ: {formatVND(contract.cleaningPrice)} / tháng<br />
+          - Kỳ thanh toán: Bên B có nghĩa vụ thanh toán đầy đủ tiền phòng trọ và dịch vụ vào ngày {contract.paymentDay || 30} hàng tháng.
+        </div>
+
+        <div className="paper-section">
+          <strong>ĐIỀU 3: DANH SÁCH ĐỒ DÙNG VÀ THIẾT BỊ BÊN A BÀN GIAO</strong><br />
+          {parseInventory(contract.inventory).length > 0 ? (
+            <table className="inv-table">
+              <thead>
+                <tr>
+                  <th className="c col-stt">STT</th>
+                  <th>Tên loại thiết bị</th>
+                  <th className="c col-qty">Số lượng</th>
+                  <th>Tình trạng bàn giao</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parseInventory(contract.inventory).map((item, index) => (
+                  <tr key={index}>
+                    <td className="c">{index + 1}</td>
+                    <td>{item.name}</td>
+                    <td className="c">{item.quantity}</td>
+                    <td>{item.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <span>Không bàn giao thiết bị đặc biệt nào kèm theo.</span>
+          )}
+        </div>
+
+        <div className="paper-section">
+          <strong>ĐIỀU 4: NỘI QUY VÀ CAM KẾT CHUNG</strong><br />
+          - Bên B có nghĩa vụ thanh toán tiền thuê phòng và các chi phí dịch vụ đúng hạn định.<br />
+          - Giữ gìn vệ sinh chung, nếp sống văn minh đô thị, giữ gìn trật tự và hạn chế tiếng ồn sau 23:00.<br />
+          - Tuân thủ nghiêm ngặt các quy định về an toàn phòng cháy chữa cháy (PCCC).<br />
+          - Không tự ý đục phá, sửa chữa hoặc làm thay đổi kết cấu hiện trạng phòng khi chưa có sự đồng ý của Bên A.<br />
+          - Thực hiện nghiêm túc việc khai báo tạm trú tạm vắng theo đúng quy định pháp luật.
+        </div>
+
+        {isTerminated && (
+          <div className="paper-section">
+            <strong>BIÊN BẢN THANH LÝ</strong><br />
+            Ngày thanh lý: {contract.terminatedAt ? formatDate(contract.terminatedAt) : 'N/A'}<br />
+            Tình trạng: Hợp đồng đã hoàn tất thủ tục trả phòng và thanh lý.
           </div>
-          <div className="doc-head-main">
-            <h2 className="doc-title">Hợp đồng thuê phòng</h2>
-            <span className="code-chip">Mã số: HĐ-{contract.id}-{room.roomNumber}</span>
+        )}
+
+        <div className="paper-signs">
+          <div className="paper-sign">
+            <strong>Đại diện Bên A</strong><br />
+            <small className="paper-sign-hint">(Ký và ghi rõ họ tên)</small>
+            {contract.landlordSignature ? (
+              <div className="paper-sign-slot">
+                <img src={contract.landlordSignature} alt="Chữ ký bên A" className="paper-sign-img" /><br />
+                <small className="paper-sign-hint">Ký ngày: {contract.landlordSignedAt ? formatDate(contract.landlordSignedAt) : 'N/A'}</small>
+              </div>
+            ) : <div className="paper-sign-gap" />}
+            <strong>{contract.landlordName || landlord?.name || 'N/A'}</strong>
+          </div>
+
+          <div className="paper-sign">
+            <strong>Đại diện Bên B</strong><br />
+            <small className="paper-sign-hint">(Ký và ghi rõ họ tên)</small>
+            {contract.tenantSignature ? (
+              <div className="paper-sign-slot">
+                <img src={contract.tenantSignature} alt="Chữ ký bên B" className="paper-sign-img" /><br />
+                <small className="paper-sign-hint">Ký ngày: {contract.tenantSignedAt ? formatDate(contract.tenantSignedAt) : 'N/A'}</small>
+              </div>
+            ) : isViewingPending ? (
+              <div className="paper-sign-wait" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <span>(Hợp đồng chưa được ký bởi Bên B)</span>
+                <div className="sign-pending-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Button
+                    type="primary"
+                    className="btn-success"
+                    icon={<FileSignature size={15} />}
+                    onClick={() => setSignatureModalVisible(true)}
+                  >
+                    Vẽ &amp; Ký hợp đồng ngay
+                  </Button>
+                  <Button
+                    danger
+                    icon={<XCircle size={15} />}
+                    onClick={() => setRejectModalVisible(true)}
+                  >
+                    Từ chối
+                  </Button>
+                </div>
+              </div>
+            ) : isTerminated ? (
+              <div className="paper-sign-wait">(Hợp đồng đã thanh lý)</div>
+            ) : (
+              <div className="paper-sign-wait">(Chờ người thuê ký xác nhận)</div>
+            )}
+            <strong>{contract.tenantName || profile?.name || 'N/A'}</strong>
           </div>
         </div>
 
-        <Divider className="doc-divider" />
-
-        {/* SECTION 1: CÁC BÊN THAM GIA */}
-        <section className="doc-section">
-          <h3 className="section-title">1. Các bên ký kết</h3>
-          <Row gutter={[16, 16]}>
-            <Col xs={24} sm={12}>
-              <div className="party-box">
-                <div className="party-role landlord">Bên cho thuê (Chủ nhà)</div>
-                <div className="party-name">{contract.landlordName || landlord?.name || 'N/A'}</div>
-                <div className="party-meta">SĐT: {contract.landlordPhone || landlord?.phone || 'N/A'}</div>
-                <div className="party-meta">CCCD: {contract.landlordCccd || 'N/A'}</div>
-              </div>
-            </Col>
-            <Col xs={24} sm={12}>
-              <div className="party-box">
-                <div className="party-role tenant">Bên thuê (Khách thuê)</div>
-                <div className="party-name">{contract.tenantName || profile?.name || 'N/A'}</div>
-                <div className="party-meta">SĐT: {contract.tenantPhone || profile?.phone || 'N/A'}</div>
-                <div className="party-meta">CCCD: {contract.tenantCccd || 'N/A'}</div>
-              </div>
-            </Col>
-          </Row>
-        </section>
-
-        {/* SECTION 2: THÔNG TIN PHÒNG & THỜI HẠN */}
-        <section className="doc-section">
-          <h3 className="section-title">2. Thông tin phòng &amp; Thời hạn thuê</h3>
-          <Row gutter={[16, 16]}>
-            <Col xs={12} sm={8}>
-              <div className="info-cell">
-                <div className="info-label">Phòng thuê</div>
-                <div className="info-value">Phòng {room.roomNumber}</div>
-              </div>
-            </Col>
-            <Col xs={12} sm={8}>
-              <div className="info-cell">
-                <div className="info-label">Tòa nhà</div>
-                <div className="info-value">{building.name}</div>
-              </div>
-            </Col>
-            <Col xs={24} sm={8}>
-              <div className="info-cell">
-                <div className="info-label">Giá thuê phòng</div>
-                <div className="info-value text-danger">{formatVND(contract.rentPrice ?? room.price)}/tháng</div>
-              </div>
-            </Col>
-            <Col xs={12} sm={8}>
-              <div className="info-cell">
-                <div className="info-label">Tiền đặt cọc</div>
-                <div className="info-value">{formatVND(contract.deposit)}</div>
-              </div>
-            </Col>
-            <Col xs={12} sm={8}>
-              <div className="info-cell">
-                <div className="info-label">Ngày bắt đầu</div>
-                <div className="info-value">{formatDate(contract.startDate)}</div>
-              </div>
-            </Col>
-            <Col xs={24} sm={8}>
-              <div className="info-cell">
-                <div className="info-label">Ngày hết hạn</div>
-                <div className="info-value">{formatDate(contract.endDate)}</div>
-              </div>
-            </Col>
-          </Row>
-        </section>
-
-        {/* SECTION 3: BẢNG GIÁ DỊCH VỤ THỎA THUẬN */}
-        <section className="doc-section">
-          <h3 className="section-title">3. Đơn giá dịch vụ</h3>
-          <div className="price-table">
-            <div className="price-head">
-              <span>Dịch vụ</span>
-              <span>Đơn giá thỏa thuận</span>
-            </div>
-
-            <div className="price-row">
-              <span className="price-name">
-                <Zap size={15} aria-hidden="true" /> Tiền điện
-              </span>
-              <span className="price-value">
-                {formatVND(contract.electricityPrice)} / kWh
-                <span className="price-note">Bắt đầu: {contract.initialElectricity} kWh</span>
-              </span>
-            </div>
-
-            <div className="price-row">
-              <span className="price-name">
-                <Droplets size={15} aria-hidden="true" /> Tiền nước
-              </span>
-              <span className="price-value">
-                {formatVND(contract.waterPrice)} / m³
-                <span className="price-note">Bắt đầu: {contract.initialWater} m³</span>
-              </span>
-            </div>
-
-            <div className="price-row">
-              <span className="price-name">
-                <Wifi size={15} aria-hidden="true" /> Mạng Internet
-              </span>
-              <span className="price-value">{formatVND(contract.internetPrice)} / tháng</span>
-            </div>
-
-            <div className="price-row">
-              <span className="price-name">
-                <Sparkles size={15} aria-hidden="true" /> Phí dịch vụ &amp; Vệ sinh chung
-              </span>
-              <span className="price-value">{formatVND(contract.cleaningPrice)} / tháng</span>
-            </div>
-          </div>
-        </section>
-
-        {/* SECTION 4: NỘI QUY & CAM KẾT CHUNG */}
-        <section className="doc-section">
-          <h3 className="section-title">4. Nội quy tòa nhà &amp; Cam kết</h3>
-          <ul className="rule-list">
-            <li className="rule-item">
-              <CheckSquare size={15} aria-hidden="true" />
-              <span>Đóng tiền phòng đúng kỳ hạn thỏa thuận hàng tháng.</span>
-            </li>
-            <li className="rule-item">
-              <CheckSquare size={15} aria-hidden="true" />
-              <span>Giữ gìn vệ sinh chung, vứt rác đúng nơi quy định, hạn chế làm ồn sau 23:00.</span>
-            </li>
-            <li className="rule-item">
-              <CheckSquare size={15} aria-hidden="true" />
-              <span>Không tự ý cải tạo kết cấu phòng, đục tường khoan lỗ khi chưa xin phép chủ nhà.</span>
-            </li>
-            <li className="rule-item">
-              <CheckSquare size={15} aria-hidden="true" />
-              <span>Tuân thủ khai báo tạm trú tạm vắng theo đúng quy định pháp luật.</span>
-            </li>
-          </ul>
-        </section>
-
-        <Divider className="doc-divider" />
-
-        {/* SECTION 5: XÁC NHẬN KÝ SỐ 2 BÊN */}
-        <section className="doc-section doc-section-last">
-          <h3 className="section-title">5. Chữ ký điện tử của các bên ký kết</h3>
-
-          <Row gutter={[16, 16]}>
-            {/* BÊN A */}
-            <Col xs={24} sm={12}>
-              <div className="sign-box">
-                <div className="sign-role">Bên cho thuê (Chủ nhà)</div>
-                {contract.landlordSignature ? (
-                  <>
-                    <div className="sign-image">
-                      <img src={contract.landlordSignature} alt="Chữ ký Bên A" />
-                    </div>
-                    <div className="sign-status ok">Đã ký số ({formatDate(contract.landlordSignedAt)})</div>
-                  </>
-                ) : (
-                  <div className="sign-box-empty">Chưa cập nhật chữ ký</div>
-                )}
-                <div className="sign-name">{contract.landlordName || landlord?.name || 'N/A'}</div>
-              </div>
-            </Col>
-
-            {/* BÊN B */}
-            <Col xs={24} sm={12}>
-              <div className={`sign-box ${isViewingPending ? 'is-pending' : ''}`}>
-                <div className="sign-role">Bên thuê (Khách thuê)</div>
-
-                {(hasActiveContract || isTerminated) && contract.tenantSignature ? (
-                  <>
-                    <div className="sign-image">
-                      <img src={contract.tenantSignature} alt="Chữ ký Bên B" />
-                    </div>
-                    <div className="sign-status ok">Đã ký số ({formatDate(contract.tenantSignedAt)})</div>
-                  </>
-                ) : isTerminated ? (
-                  <div className="sign-box-empty">Hợp đồng đã thanh lý</div>
-                ) : (
-                  <div className="sign-pending">
-                    <p className="sign-pending-text">Hợp đồng chưa được ký bởi Bên B.</p>
-                    <div className="sign-pending-actions">
-                      <Button
-                        type="primary"
-                        className="btn-success"
-                        icon={<FileSignature size={15} />}
-                        onClick={() => setSignatureModalVisible(true)}
-                      >
-                        Vẽ &amp; Ký hợp đồng ngay
-                      </Button>
-                      <Button
-                        danger
-                        icon={<XCircle size={15} />}
-                        onClick={() => setRejectModalVisible(true)}
-                      >
-                        Từ chối
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="sign-name">{contract.tenantName || profile?.name || 'N/A'}</div>
-              </div>
-            </Col>
-          </Row>
-        </section>
-
-      </Card>
+      </div>
 
       {/* MODAL KÝ SỐ CANVAS CHO KHÁCH THUÊ */}
       <SignaturePadModal
@@ -617,6 +544,45 @@ const TenantContract = () => {
         </p>
         <DatePicker className="w-full" format="DD/MM/YYYY" value={requestDate} onChange={setRequestDate} style={{ width: '100%', marginBottom: 12 }} />
         <Input.TextArea rows={3} placeholder="Ghi chú cho chủ nhà" value={requestNote} onChange={(e) => setRequestNote(e.target.value)} maxLength={500} />
+      </Modal>
+
+      {/* MODAL DANH SÁCH YÊU CẦU CỦA TÔI */}
+      <Modal
+        title={
+          <span className="modal-title">
+            <History size={18} aria-hidden="true" style={{ marginRight: 8, color: '#0F766E' }} />
+            Yêu cầu của tôi
+          </span>
+        }
+        open={requestsModalVisible}
+        onCancel={() => setRequestsModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setRequestsModalVisible(false)}>
+            Đóng
+          </Button>
+        ]}
+        width={560}
+        centered
+      >
+        {requests.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Bạn chưa gửi yêu cầu nào tới chủ nhà." />
+        ) : (
+          <List
+            dataSource={requests}
+            renderItem={(r) => (
+              <List.Item>
+                <div style={{ flex: 1, paddingRight: 12 }}>
+                  <div style={{ fontWeight: 600, color: '#0F172A', fontSize: 14 }}>
+                    {REQUEST_TYPE_LABELS[r.type] || r.type} · ngày {formatDate(r.desiredDate)}
+                  </div>
+                  {r.note && <div className="cell-sub" style={{ color: '#475569', marginTop: 4 }}>Ghi chú: {r.note}</div>}
+                  {r.responseNote && <div className="cell-sub" style={{ color: '#0F766E', marginTop: 2 }}>Phản hồi của chủ nhà: {r.responseNote}</div>}
+                </div>
+                <Tag color={REQUEST_STATUS[r.status]?.color}>{REQUEST_STATUS[r.status]?.text || r.status}</Tag>
+              </List.Item>
+            )}
+          />
+        )}
       </Modal>
 
     </div>

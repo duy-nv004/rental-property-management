@@ -11,7 +11,9 @@ const AuthLayout = ({ heading, description, title, subtitle, children }) => (
   <div className="auth-page">
     <aside className="auth-banner">
       <div className="auth-brand">
-        <div className="app-brand-mark"><Building2 size={18} aria-hidden="true" /></div>
+        <div className="app-brand-mark" style={{ overflow: 'hidden', padding: 0 }}>
+          <img src="/favicon.png" alt="HomeSync Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
         <div>
           <div className="auth-brand-name">HomeSync</div>
           <div className="auth-brand-sub">Hệ thống quản lý phòng trọ</div>
@@ -37,7 +39,9 @@ const AuthLayout = ({ heading, description, title, subtitle, children }) => (
     <main className="auth-form-col">
       <div className="auth-form-box">
         <div className="auth-mobile-brand">
-          <div className="app-brand-mark"><Building2 size={18} aria-hidden="true" /></div>
+          <div className="app-brand-mark" style={{ overflow: 'hidden', padding: 0 }}>
+            <img src="/favicon.png" alt="HomeSync Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
           <span className="app-brand-name">HomeSync</span>
         </div>
         <h2 className="auth-title">{title}</h2>

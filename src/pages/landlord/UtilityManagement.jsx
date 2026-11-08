@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Table, Select, InputNumber, Input, Checkbox, Button, Space, message, Modal, Tag, Alert, Card, Upload, Tooltip, DatePicker } from 'antd';
+import { Table, Select, InputNumber, Button, Space, message, Modal, Tag, Alert, Card, Upload, Tooltip, DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { Calculator, CheckCircle2, Save, Camera, ArrowRight, RotateCcw } from 'lucide-react';
+import { Calculator, CheckCircle2, Save, Camera, ArrowRight } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 import { computeMeterUsage, buildMeterSyncPayload } from '../../utils/contracts';
+import { getLatestReading as getLatestReadingUtil, computeUsageAnomaly } from '../../utils/utilityAnomaly';
 
 const UtilityManagement = () => {
   const navigate = useNavigate();
@@ -16,7 +17,7 @@ const UtilityManagement = () => {
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
 
   // State quản lý giá trị nhập chỉ số cho từng phòng:
-  // { [roomId]: { electricity, water, electricityReset, waterReset, resetReason } }
+  // { [roomId]: { electricity, water } }
   const [readingsInput, setReadingsInput] = useState({});
   const [savingRoomId, setSavingRoomId] = useState(null);
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -78,12 +79,16 @@ const UtilityManagement = () => {
   }, [fetchData]);
 
   // Lấy chỉ số cũ = bản ghi của kỳ gần nhất TRƯỚC kỳ hiện tại, giống cách backend tính hóa đơn.
-  const getLatestReading = (roomReadings, type) => {
-    if (!roomReadings || roomReadings.length === 0) return 0;
-    const filtered = roomReadings
-      .filter(r => r.type === type && r.period && r.period < currentPeriod)
-      .sort((a, b) => b.period.localeCompare(a.period));
-    return filtered.length > 0 ? filtered[0].readingValue : 0;
+  const getLatestReading = (roomReadings, type) => getLatestReadingUtil(roomReadings, type, currentPeriod);
+
+  // Kiểm tra bất thường tiêu thụ so với trung bình các kỳ trước (Mục 7)
+  const checkUsageAnomaly = (room, type, currentReadingVal) => {
+    return computeUsageAnomaly({
+      currentReadingVal,
+      roomReadings: room?.readings,
+      type,
+      currentPeriod
+    });
   };
 
   // Phòng đã xuất hóa đơn kỳ này thì coi là đã chốt: hiện số cũ -> số mới, không cho chốt lại
@@ -135,31 +140,17 @@ const UtilityManagement = () => {
     }
     const prevElec = getLatestReading(room.readings, 'electricity');
     const prevWater = getLatestReading(room.readings, 'water');
-    const elecReset = Boolean(input?.electricityReset);
-    const waterReset = Boolean(input?.waterReset);
-    const reason = (input?.resetReason || '').trim();
 
-    if ((elecReset || waterReset) && reason.length < 5) {
-      return `Phòng ${room.roomNumber}: Vui lòng nhập lý do thay/reset đồng hồ (tối thiểu 5 ký tự)!`;
+    if (elecVal < prevElec) {
+      return `Phòng ${room.roomNumber}: Chỉ số ĐIỆN mới (${elecVal}) không được nhỏ hơn chỉ số cũ (${prevElec})!`;
     }
-    if (!elecReset && elecVal < prevElec) {
-      return `Phòng ${room.roomNumber}: Chỉ số ĐIỆN mới (${elecVal}) không được nhỏ hơn chỉ số cũ (${prevElec}). Nếu vừa thay đồng hồ, hãy bật "Thay đồng hồ mới"!`;
-    }
-    if (!waterReset && waterVal < prevWater) {
-      return `Phòng ${room.roomNumber}: Chỉ số NƯỚC mới (${waterVal}) không được nhỏ hơn chỉ số cũ (${prevWater}). Nếu vừa thay đồng hồ, hãy bật "Thay đồng hồ mới"!`;
+    if (waterVal < prevWater) {
+      return `Phòng ${room.roomNumber}: Chỉ số NƯỚC mới (${waterVal}) không được nhỏ hơn chỉ số cũ (${prevWater})!`;
     }
     return null;
   };
 
-  // 1. Chốt số & Xuất Hóa Đơn cho Từng Phòng
-  const handleSaveAndGenerateInvoice = async (room) => {
-    const input = readingsInput[room.id];
-    const validationErr = validateRoomInput(room, input);
-    if (validationErr) {
-      message.error(validationErr);
-      return;
-    }
-
+  const proceedSave = async (room, input) => {
     setSavingRoomId(room.id);
     try {
       // B1: Ghi số điện nước (kèm cờ thay đồng hồ nếu có - T2.4)
@@ -187,6 +178,31 @@ const UtilityManagement = () => {
     } finally {
       setSavingRoomId(null);
     }
+  };
+
+  // 1. Chốt số & Xuất Hóa Đơn cho Từng Phòng
+  const handleSaveAndGenerateInvoice = async (room) => {
+    const input = readingsInput[room.id];
+    const validationErr = validateRoomInput(room, input);
+    if (validationErr) {
+      message.error(validationErr);
+      return;
+    }
+
+    const elecAnomaly = checkUsageAnomaly(room, 'electricity', input?.electricity);
+    const waterAnomaly = checkUsageAnomaly(room, 'water', input?.water);
+    if (elecAnomaly || waterAnomaly) {
+      Modal.confirm({
+        title: `Cảnh báo chỉ số tăng vọt - Phòng ${room.roomNumber}`,
+        content: `Chỉ số tiêu thụ kỳ này tăng đột biến: ${elecAnomaly ? `Điện tăng ${elecAnomaly.percent}%. ` : ''}${waterAnomaly ? `Nước tăng ${waterAnomaly.percent}%. ` : ''}Bạn có chắc chắn chỉ số đã chính xác và muốn tiếp tục xuất hóa đơn?`,
+        okText: 'Tiếp tục xuất HĐ',
+        cancelText: 'Kiểm tra lại',
+        onOk: () => proceedSave(room, input)
+      });
+      return;
+    }
+
+    await proceedSave(room, input);
   };
 
   // 2. Chốt số & Xuất Hóa Đơn Hàng loạt (Toàn bộ tòa nhà)
@@ -269,15 +285,14 @@ const UtilityManagement = () => {
   // Danh sách phòng đang thuê của tòa nhà được chọn
   const filteredRooms = rooms.filter(r => r.buildingId === selectedBuildingId && r.status === 'occupied');
 
-  // Ô nhập chỉ số kèm nút quét ảnh bằng AI và tùy chọn Thay đồng hồ mới (T2.4)
+  // Ô nhập chỉ số kèm nút quét ảnh bằng AI
   const MeterCell = ({ room, type, prevValue, unit }) => {
     const roomInput = readingsInput[room.id] || {};
     const currentVal = roomInput[type];
-    const resetField = type === 'electricity' ? 'electricityReset' : 'waterReset';
-    const isReset = Boolean(roomInput[resetField]);
-    const used = computeMeterUsage(currentVal, prevValue, isReset);
+    const used = computeMeterUsage(currentVal, prevValue);
     const scanning = scanningStates[`${room.id}-${type}`];
     const label = type === 'electricity' ? 'điện' : 'nước';
+    const anomaly = checkUsageAnomaly(room, type, currentVal);
 
     if (isClosed(room)) {
       const cur = getCurrentReading(room.readings, type);
@@ -291,22 +306,13 @@ const UtilityManagement = () => {
 
     return (
       <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: '#64748B' }}>
-            Số cũ: <b style={{ color: '#0F172A' }}>{prevValue}</b>
-          </span>
-          <Checkbox
-            checked={isReset}
-            onChange={(e) => handleInputChange(room.id, resetField, e.target.checked)}
-            style={{ fontSize: 12 }}
-          >
-            <span style={{ fontSize: 12, color: '#475569' }}>Thay đồng hồ mới</span>
-          </Checkbox>
+        <div style={{ fontSize: 12, color: '#64748B' }}>
+          Số cũ: <b style={{ color: '#0F172A' }}>{prevValue}</b>
         </div>
         <Space size={6}>
           <InputNumber
-            min={isReset ? 0 : prevValue}
-            placeholder={isReset ? 'Số mới từ 0' : 'Chỉ số mới'}
+            min={prevValue}
+            placeholder="Chỉ số mới"
             aria-label={`Chỉ số ${label} mới của phòng ${room.roomNumber}`}
             value={currentVal}
             onChange={(val) => handleInputChange(room.id, type, val)}
@@ -330,21 +336,20 @@ const UtilityManagement = () => {
             </Tooltip>
           </Upload>
         </Space>
-        {isReset && (
-          <Input
-            size="small"
-            prefix={<RotateCcw size={12} style={{ color: '#64748B' }} aria-hidden="true" />}
-            placeholder="Lý do thay đồng hồ (>= 5 ký tự)"
-            aria-label={`Lý do thay đồng hồ phòng ${room.roomNumber}`}
-            value={roomInput.resetReason || ''}
-            onChange={(e) => handleInputChange(room.id, 'resetReason', e.target.value)}
-          />
-        )}
-        {used !== null && used >= 0 && (
-          <Tag color={isReset ? 'geekblue' : 'cyan'}>
-            {isReset ? `Đồng hồ mới: dùng ${used} ${unit}` : `Dùng ${used} ${unit}`}
-          </Tag>
-        )}
+        <Space size={4} wrap>
+          {used !== null && used >= 0 && (
+            <Tag color="cyan">
+              Dùng {used} {unit}
+            </Tag>
+          )}
+          {anomaly && (
+            <Tooltip title={`Tiêu thụ ${anomaly.used} ${unit}, tăng ${anomaly.percent}% so với mức trung bình (${anomaly.avg} ${unit}). Vui lòng kiểm tra lại đồng hồ hoặc xem có sự cố rò rỉ không!`}>
+              <Tag color="warning" style={{ fontSize: 11, cursor: 'help' }}>
+                ⚠️ {anomaly.msg}
+              </Tag>
+            </Tooltip>
+          )}
+        </Space>
       </Space>
     );
   };
@@ -385,6 +390,7 @@ const UtilityManagement = () => {
       dataIndex: 'price',
       key: 'price',
       width: 140,
+      responsive: ['md'],
       render: (price) => <b>{formatVND(price)}</b>
     },
     {

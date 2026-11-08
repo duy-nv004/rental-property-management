@@ -142,6 +142,7 @@ const TicketManager = () => {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 150,
+      responsive: ['md'],
       render: (date) => (
         <span style={{ color: '#64748b', fontSize: '12px' }}>
           {new Date(date).toLocaleString('vi-VN')}
