@@ -1,44 +1,54 @@
+import React, { Suspense } from 'react';
 import { useRoutes, Navigate } from 'react-router-dom';
 import ProtectedRoute from '../components/common/ProtectedRoute';
+import PageLoadingFallback from '../components/common/PageLoadingFallback';
 
-// Layouts
+// Helper bọc Suspense cho từng Lazy Route component
+const withLazy = (Component) => (
+  <Suspense fallback={<PageLoadingFallback />}>
+    <Component />
+  </Suspense>
+);
+
+// Layouts giữ import tĩnh để cố định AppShell, Header và Sidebar không bị nhấp nháy
 import AdminLayout from '../layouts/AdminLayout';
 import LandlordLayout from '../layouts/LandlordLayout';
 import TenantLayout from '../layouts/TenantLayout';
 
-// Pages - Super Admin
-import AdminDashboard from '../pages/admin/Dashboard';
-import LandlordList from '../pages/admin/LandlordList';
-import PackageSettings from '../pages/admin/PackageSettings';
-import ActivityLogs from '../pages/admin/ActivityLogs';
-import TicketManager from '../pages/admin/TicketManager';
-import AdminProfile from '../pages/admin/Profile';
+// Pages - Super Admin (Dynamic code-splitting)
+const AdminDashboard = React.lazy(() => import('../pages/admin/Dashboard'));
+const LandlordList = React.lazy(() => import('../pages/admin/LandlordList'));
+const PackageSettings = React.lazy(() => import('../pages/admin/PackageSettings'));
+const ActivityLogs = React.lazy(() => import('../pages/admin/ActivityLogs'));
+const TicketManager = React.lazy(() => import('../pages/admin/TicketManager'));
+const AdminProfile = React.lazy(() => import('../pages/admin/Profile'));
 
-// Pages - Landlord
-import LandlordDashboard from '../pages/landlord/Dashboard'; // Trang Dashboard của chủ nhà
-import BuildingManager from '../pages/landlord/BuildingManager'; // Trang Asset Inventory
-import TenantManager from '../pages/landlord/TenantManager'; // Trang Active Relationships
-import UtilityManagement from '../pages/landlord/UtilityManagement'; // Trang Utility & Meter
-import Financials from '../pages/landlord/Financials'; // Trang Financial Statistics
-import ContractManager from '../pages/landlord/ContractManager';
-import SupportManager from '../pages/landlord/SupportManager';
-import LandlordProfile from '../pages/landlord/Profile';
-import Plans from '../pages/landlord/Plans';
-import InvoiceManager from '../pages/landlord/InvoiceManager';
+// Pages - Landlord (Dynamic code-splitting)
+const LandlordDashboard = React.lazy(() => import('../pages/landlord/Dashboard'));
+const BuildingManager = React.lazy(() => import('../pages/landlord/BuildingManager'));
+const TenantManager = React.lazy(() => import('../pages/landlord/TenantManager'));
+const UtilityManagement = React.lazy(() => import('../pages/landlord/UtilityManagement'));
+const Financials = React.lazy(() => import('../pages/landlord/Financials'));
+const ContractManager = React.lazy(() => import('../pages/landlord/ContractManager'));
+const SupportManager = React.lazy(() => import('../pages/landlord/SupportManager'));
+const LandlordProfile = React.lazy(() => import('../pages/landlord/Profile'));
+const Plans = React.lazy(() => import('../pages/landlord/Plans'));
+const InvoiceManager = React.lazy(() => import('../pages/landlord/InvoiceManager'));
 
-// Pages - Tenant
-import TenantDashboard from '../pages/tenant/Dashboard';
-import TenantInvoices from '../pages/tenant/Invoices';
-import TenantContract from '../pages/tenant/Contract';
-import TenantSupport from '../pages/tenant/Support';
-import TenantProfile from '../pages/tenant/Profile';
+// Pages - Tenant (Dynamic code-splitting)
+const TenantDashboard = React.lazy(() => import('../pages/tenant/Dashboard'));
+const TenantInvoices = React.lazy(() => import('../pages/tenant/Invoices'));
+const TenantContract = React.lazy(() => import('../pages/tenant/Contract'));
+const TenantSupport = React.lazy(() => import('../pages/tenant/Support'));
+const TenantProfile = React.lazy(() => import('../pages/tenant/Profile'));
 
-import Login from '../pages/Login';
-import Register from '../pages/Register';
+// Pages - Auth (Dynamic code-splitting)
+const Login = React.lazy(() => import('../pages/Login'));
+const Register = React.lazy(() => import('../pages/Register'));
 
 const ThemeRoutes = () => {
   return useRoutes([
-    // --- LUỒNG CHO SUPER ADMIN (BẠN) ---
+    // --- LUỒNG CHO SUPER ADMIN ---
     {
       path: '/admin',
       element: (
@@ -47,12 +57,12 @@ const ThemeRoutes = () => {
         </ProtectedRoute>
       ),
       children: [
-        { path: 'dashboard', element: <AdminDashboard /> },
-        { path: 'landlords', element: <LandlordList /> },
-        { path: 'packages', element: <PackageSettings /> },
-        { path: 'logs', element: <ActivityLogs /> },
-        { path: 'tickets', element: <TicketManager /> },
-        { path: 'profile', element: <AdminProfile /> },
+        { path: 'dashboard', element: withLazy(AdminDashboard) },
+        { path: 'landlords', element: withLazy(LandlordList) },
+        { path: 'packages', element: withLazy(PackageSettings) },
+        { path: 'logs', element: withLazy(ActivityLogs) },
+        { path: 'tickets', element: withLazy(TicketManager) },
+        { path: 'profile', element: withLazy(AdminProfile) },
         { path: '', element: <Navigate to="dashboard" /> },
       ],
     },
@@ -66,18 +76,17 @@ const ThemeRoutes = () => {
         </ProtectedRoute>
       ),
       children: [
-        { path: 'dashboard', element: <LandlordDashboard /> },
-        { path: 'buildings', element: <BuildingManager /> },
-        { path: 'tenants', element: <TenantManager /> },
-        // Đường dẫn cũ, giữ lại để bookmark cũ không bị 404
+        { path: 'dashboard', element: withLazy(LandlordDashboard) },
+        { path: 'buildings', element: withLazy(BuildingManager) },
+        { path: 'tenants', element: withLazy(TenantManager) },
         { path: 'rooms', element: <Navigate to="/landlord/buildings" replace /> },
-        { path: 'utilities', element: <UtilityManagement /> }, // Phần điện nước
-        { path: 'invoices', element: <InvoiceManager /> },
-        { path: 'financials', element: <Financials /> },
-        { path: 'contracts', element: <ContractManager /> },
-        { path: 'support', element: <SupportManager /> },
-        { path: 'profile', element: <LandlordProfile /> },
-        { path: 'plans', element: <Plans /> },
+        { path: 'utilities', element: withLazy(UtilityManagement) },
+        { path: 'invoices', element: withLazy(InvoiceManager) },
+        { path: 'financials', element: withLazy(Financials) },
+        { path: 'contracts', element: withLazy(ContractManager) },
+        { path: 'support', element: withLazy(SupportManager) },
+        { path: 'profile', element: withLazy(LandlordProfile) },
+        { path: 'plans', element: withLazy(Plans) },
         { path: '', element: <Navigate to="dashboard" /> },
       ],
     },
@@ -91,11 +100,11 @@ const ThemeRoutes = () => {
         </ProtectedRoute>
       ),
       children: [
-        { path: 'dashboard', element: <TenantDashboard /> },
-        { path: 'invoices', element: <TenantInvoices /> },
-        { path: 'contract', element: <TenantContract /> },
-        { path: 'support', element: <TenantSupport /> },
-        { path: 'profile', element: <TenantProfile /> },
+        { path: 'dashboard', element: withLazy(TenantDashboard) },
+        { path: 'invoices', element: withLazy(TenantInvoices) },
+        { path: 'contract', element: withLazy(TenantContract) },
+        { path: 'support', element: withLazy(TenantSupport) },
+        { path: 'profile', element: withLazy(TenantProfile) },
         { path: '', element: <Navigate to="dashboard" /> },
       ],
     },
@@ -103,11 +112,11 @@ const ThemeRoutes = () => {
     // --- CÁC TRANG CHUNG ---
     {
       path: '/login',
-      element: <Login />,
+      element: withLazy(Login),
     },
     {
       path: '/register',
-      element: <Register />,
+      element: withLazy(Register),
     },
     {
       path: '/',

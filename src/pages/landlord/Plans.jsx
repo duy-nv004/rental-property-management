@@ -487,7 +487,7 @@ const Plans = () => {
       </Card>
 
       {/* ─── THANH CHUYỂN ĐỔI THEO THÁNG / THEO NĂM ─────────────────────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24, maxWidth: '100%' }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
           <Sparkles size={18} color="#0F766E" aria-hidden="true" /> Chọn chu kỳ thanh toán
         </div>
@@ -495,11 +495,12 @@ const Plans = () => {
         <Segmented
           value={billingCycle}
           onChange={setBillingCycle}
+          style={{ maxWidth: '100%' }}
           options={[
-            { label: <span style={{ padding: '6px 16px', fontWeight: 600 }}>Theo tháng</span>, value: 'monthly' },
+            { label: <span style={{ padding: '4px 8px', fontWeight: 600 }}>Theo tháng</span>, value: 'monthly' },
             {
               label: (
-                <span style={{ padding: '6px 16px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ padding: '4px 8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   Theo năm
                   <Tag color="#0F766E" style={{ margin: 0, fontSize: 11, fontWeight: 700 }}>Tiết kiệm 20%</Tag>
                 </span>

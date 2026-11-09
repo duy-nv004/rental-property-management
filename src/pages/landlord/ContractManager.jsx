@@ -7,7 +7,7 @@ import PageHeader from '../../components/admin/PageHeader';
 import axiosInstance from '../../utils/axios';
 import { contractFilterKeys, filterContracts, compareEndDate, parseInventory, buildTerminationPayload, canConfirmTermination } from '../../utils/contracts';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import SignaturePadModal from '../../components/common/SignaturePadModal';
 import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
 
@@ -97,8 +97,8 @@ const ContractManager = () => {
     { name: 'Bàn bếp + bồn rửa', quantity: 1, status: 'Bình thường' }
   ]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const [contractsData, roomsData, tenantsData, buildingsData] = await Promise.all([
         axiosInstance.get('/contracts'),
@@ -112,23 +112,23 @@ const ContractManager = () => {
       setBuildings(buildingsData);
     } catch (err) {
       console.error('Error fetching contracts data:', err);
-      message.error('Không thể tải danh sách dữ liệu hợp đồng.');
+      if (!isSilent) message.error('Không thể tải danh sách dữ liệu hợp đồng.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     fetchRequests();
-    // Tự động kiểm tra hợp đồng và yêu cầu mới mỗi 12 giây hoặc khi chuyển tab
+    // Tự động kiểm tra hợp đồng và yêu cầu mới ngầm mỗi 20 giây hoặc khi chuyển tab (chạy ngầm, không nhấp nháy UI)
     const timer = setInterval(() => {
-      fetchData();
+      fetchData(true);
       fetchRequests();
-    }, 12000);
+    }, 20000);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchData();
+        fetchData(true);
         fetchRequests();
       }
     };
@@ -139,14 +139,14 @@ const ContractManager = () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onVisibilityChange);
     };
-  }, []);
+  }, [fetchData]);
 
   // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
   useEffect(() => {
-    const onChanged = () => { fetchData(); fetchRequests(); };
+    const onChanged = () => { fetchData(true); fetchRequests(); };
     window.addEventListener('app:data-changed', onChanged);
     return () => window.removeEventListener('app:data-changed', onChanged);
-  });
+  }, [fetchData]);
 
   // ─── YÊU CẦU TỪ KHÁCH (C5) ─────────────────────────────────────────────────
   // Tải riêng để lỗi API yêu cầu không làm hỏng danh sách hợp đồng
@@ -745,7 +745,7 @@ const ContractManager = () => {
     {
       title: 'HÀNH ĐỘNG',
       key: 'action',
-      fixed: 'right',
+      fixed: screens.md ? 'right' : undefined,
       width: 140,
       render: (_, record) => (
         <Space size={4} wrap>
@@ -1273,75 +1273,77 @@ const ContractManager = () => {
                 </Button>
               </div>
 
-              <table className="inv-table is-edit">
-                <thead>
-                  <tr>
-                    <th className="c col-stt">STT</th>
-                    <th>Tên loại thiết bị / đồ dùng</th>
-                    <th className="c col-qty">Số lượng</th>
-                    <th className="col-state">Tình trạng bàn giao</th>
-                    <th className="c col-del">Xóa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventoryList.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="c">{idx + 1}</td>
-                      <td>
-                        <Input
-                          value={item.name}
-                          onChange={(e) => {
-                            const updated = [...inventoryList];
-                            updated[idx].name = e.target.value;
-                            setInventoryList(updated);
-                          }}
-                          placeholder="Tên thiết bị..."
-                          size="small"
-                          variant="borderless"
-                          aria-label={`Tên thiết bị dòng ${idx + 1}`}
-                        />
-                      </td>
-                      <td className="c">
-                        <InputNumber
-                          min={1}
-                          value={item.quantity}
-                          onChange={(val) => {
-                            const updated = [...inventoryList];
-                            updated[idx].quantity = val || 1;
-                            setInventoryList(updated);
-                          }}
-                          size="small"
-                          className="w-60"
-                          aria-label={`Số lượng dòng ${idx + 1}`}
-                        />
-                      </td>
-                      <td>
-                        <Input
-                          value={item.status}
-                          onChange={(e) => {
-                            const updated = [...inventoryList];
-                            updated[idx].status = e.target.value;
-                            setInventoryList(updated);
-                          }}
-                          size="small"
-                          variant="borderless"
-                          aria-label={`Tình trạng dòng ${idx + 1}`}
-                        />
-                      </td>
-                      <td className="c">
-                        <Button
-                          type="text"
-                          danger
-                          size="small"
-                          aria-label={`Xóa dòng ${idx + 1}`}
-                          icon={<Trash2 size={14} aria-hidden="true" />}
-                          onClick={() => setInventoryList(inventoryList.filter((_, i) => i !== idx))}
-                        />
-                      </td>
+              <div className="scroll-x">
+                <table className="inv-table is-edit">
+                  <thead>
+                    <tr>
+                      <th className="c col-stt">STT</th>
+                      <th>Tên loại thiết bị / đồ dùng</th>
+                      <th className="c col-qty">Số lượng</th>
+                      <th className="col-state">Tình trạng bàn giao</th>
+                      <th className="c col-del">Xóa</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {inventoryList.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="c">{idx + 1}</td>
+                        <td>
+                          <Input
+                            value={item.name}
+                            onChange={(e) => {
+                              const updated = [...inventoryList];
+                              updated[idx].name = e.target.value;
+                              setInventoryList(updated);
+                            }}
+                            placeholder="Tên thiết bị..."
+                            size="small"
+                            variant="borderless"
+                            aria-label={`Tên thiết bị dòng ${idx + 1}`}
+                          />
+                        </td>
+                        <td className="c">
+                          <InputNumber
+                            min={1}
+                            value={item.quantity}
+                            onChange={(val) => {
+                              const updated = [...inventoryList];
+                              updated[idx].quantity = val || 1;
+                              setInventoryList(updated);
+                            }}
+                            size="small"
+                            className="w-60"
+                            aria-label={`Số lượng dòng ${idx + 1}`}
+                          />
+                        </td>
+                        <td>
+                          <Input
+                            value={item.status}
+                            onChange={(e) => {
+                              const updated = [...inventoryList];
+                              updated[idx].status = e.target.value;
+                              setInventoryList(updated);
+                            }}
+                            size="small"
+                            variant="borderless"
+                            aria-label={`Tình trạng dòng ${idx + 1}`}
+                          />
+                        </td>
+                        <td className="c">
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            aria-label={`Xóa dòng ${idx + 1}`}
+                            icon={<Trash2 size={14} aria-hidden="true" />}
+                            onClick={() => setInventoryList(inventoryList.filter((_, i) => i !== idx))}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* CHỮ KÝ 2 BÊN TRÊN BẢN GIẤY */}
@@ -1448,26 +1450,28 @@ const ContractManager = () => {
             <div className="paper-section">
               <strong>ĐIỀU 3: DANH SÁCH ĐỒ DÙNG VÀ THIẾT BỊ BÊN A BÀN GIAO</strong><br />
               {parseInventory(selectedContract.inventory).length > 0 ? (
-                <table className="inv-table">
-                  <thead>
-                    <tr>
-                      <th className="c col-stt">STT</th>
-                      <th>Tên loại thiết bị</th>
-                      <th className="c col-qty">Số lượng</th>
-                      <th>Tình trạng bàn giao</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parseInventory(selectedContract.inventory).map((item, index) => (
-                      <tr key={index}>
-                        <td className="c">{index + 1}</td>
-                        <td>{item.name}</td>
-                        <td className="c">{item.quantity}</td>
-                        <td>{item.status}</td>
+                <div className="scroll-x">
+                  <table className="inv-table">
+                    <thead>
+                      <tr>
+                        <th className="c col-stt">STT</th>
+                        <th>Tên loại thiết bị</th>
+                        <th className="c col-qty">Số lượng</th>
+                        <th>Tình trạng bàn giao</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {parseInventory(selectedContract.inventory).map((item, index) => (
+                        <tr key={index}>
+                          <td className="c">{index + 1}</td>
+                          <td>{item.name}</td>
+                          <td className="c">{item.quantity}</td>
+                          <td>{item.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <span>Không bàn giao thiết bị đặc biệt nào kèm theo.</span>
               )}

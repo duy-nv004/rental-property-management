@@ -137,8 +137,8 @@ const PwaInstallPrompt = () => {
           style={{
             position: 'fixed',
             bottom: hasBottomNav ? 76 : 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
+            left: hasBottomNav ? 12 : '50%',
+            transform: hasBottomNav ? 'none' : 'translateX(-50%)',
             zIndex: 950,
             background: 'linear-gradient(135deg, #0F766E 0%, #115E59 100%)',
             color: '#FFFFFF',
@@ -147,9 +147,10 @@ const PwaInstallPrompt = () => {
             boxShadow: '0 6px 20px rgba(15, 118, 110, 0.35)',
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
+            gap: 8,
             width: 'max-content',
-            maxWidth: 'calc(100vw - 24px)',
+            maxWidth: hasBottomNav ? 'calc(100vw - 84px)' : 'calc(100vw - 24px)',
+            boxSizing: 'border-box',
             animation: 'fadeInUp 0.3s ease-out'
           }}
           role="region"

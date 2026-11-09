@@ -115,6 +115,10 @@ body {
   display: block; width: 100%; text-align: left; padding: 10px 12px;
   border: none; border-radius: 8px; background: transparent; cursor: pointer; font: inherit;
   transition: background-color 0.15s ease;
+  word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box;
+}
+.notif-item * {
+  word-break: break-word; overflow-wrap: anywhere;
 }
 .notif-item:hover { background: #F8FAFC; }
 .notif-item.unread { background: var(--color-primary-soft); }
@@ -139,6 +143,11 @@ body {
 /* Thẻ số liệu & card */
 .stat-card { height: 100%; transition: box-shadow 0.2s ease, transform 0.2s ease; }
 .stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.stat-card.stat-card-compact .ant-card-body { padding: 10px 14px !important; }
+.stat-card.stat-card-compact .stat-label { font-size: 11.5px !important; font-weight: 500 !important; line-height: 1.25 !important; color: #64748B !important; }
+.stat-card.stat-card-compact .stat-value { font-size: 18px !important; font-weight: 700 !important; margin-top: 2px !important; line-height: 1.2 !important; }
+.stat-card.stat-card-compact .stat-icon { width: 32px !important; height: 32px !important; border-radius: 8px !important; }
+.stat-card.stat-card-compact .stat-icon svg { width: 16px !important; height: 16px !important; }
 .stat-label { font-size: 13px; font-weight: 500; color: var(--color-text-muted); }
 .stat-value { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: var(--color-text); margin-top: 6px; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .stat-sub { font-size: 12px; color: #64748B; margin-top: 4px; }
@@ -680,6 +689,7 @@ body {
 .w-80 { width: 80px; }
 
 .inv-table { width: 100%; margin-top: 6px; border-collapse: collapse; font-family: var(--font-sans, Inter, sans-serif); font-size: 13px; }
+.scroll-x .inv-table { min-width: 520px; }
 .inv-table th { background: #F1F5F9; font-weight: 600; }
 .inv-table th, .inv-table td { padding: 6px; border: 1px solid #CBD5E1; text-align: left; }
 .inv-table .c { text-align: center; }
@@ -884,23 +894,41 @@ body {
      ======================================================== */
   .ant-notification {
     width: 100% !important;
-    max-width: calc(100vw - 20px) !important;
-    left: 10px !important;
-    right: 10px !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
     top: 10px !important;
     margin: 0 auto !important;
+    padding: 0 10px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    pointer-events: none !important;
     z-index: 10050 !important;
+  }
+
+  .ant-notification-notice-wrapper {
+    width: 100% !important;
+    max-width: min(420px, calc(100vw - 20px)) !important;
+    margin: 0 auto 8px auto !important;
+    transform: none !important;
+    pointer-events: auto !important;
+    box-sizing: border-box !important;
   }
 
   .ant-notification-notice {
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 0 8px 0 !important;
+    margin: 0 !important;
     padding: 10px 14px !important;
     border-radius: 14px !important;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15) !important;
     border: 1px solid rgba(226, 232, 240, 0.9) !important;
     background: rgba(255, 255, 255, 0.98) !important;
+    box-sizing: border-box !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
   }
 
   .ant-notification-notice-icon {
@@ -908,18 +936,23 @@ body {
     margin-top: 2px !important;
   }
 
+  .ant-notification-notice-title,
   .ant-notification-notice-message {
     font-size: 14px !important;
     font-weight: 700 !important;
     margin-bottom: 2px !important;
     line-height: 1.35 !important;
     color: #0F172A !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
   }
 
   .ant-notification-notice-description {
     font-size: 12.5px !important;
     line-height: 1.4 !important;
     color: #475569 !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
   }
 
   .ant-notification-notice-close {
@@ -931,11 +964,15 @@ body {
   /* Toast message trên di động */
   .ant-message {
     width: 100% !important;
-    max-width: calc(100vw - 24px) !important;
-    left: 12px !important;
-    right: 12px !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
     top: 12px !important;
     margin: 0 auto !important;
+    padding: 0 12px !important;
+    box-sizing: border-box !important;
+    pointer-events: none !important;
+    text-align: center !important;
   }
 
   .ant-message-notice {
@@ -947,7 +984,73 @@ body {
     font-size: 13px !important;
     border-radius: 20px !important;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+    max-width: calc(100vw - 24px) !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    white-space: normal !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    text-align: left !important;
+    pointer-events: auto !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Cảnh báo Alert có nút bấm hành động trên di động: tự động rớt dòng full width */
+  .ant-alert {
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+  }
+
+  .ant-alert .ant-alert-content {
+    flex: 1 1 calc(100% - 32px) !important;
+    min-width: 0 !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .ant-alert .ant-alert-message,
+  .ant-alert .ant-alert-description {
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .ant-alert .ant-alert-actions,
+  .ant-alert .ant-alert-action {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    margin-inline-start: 0 !important;
+    margin-top: 10px !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .ant-alert .ant-alert-actions .ant-btn,
+  .ant-alert .ant-alert-action .ant-btn {
+    width: 100% !important;
+    min-height: 40px !important;
+  }
+
+  .ant-alert .ant-alert-actions .ant-space,
+  .ant-alert .ant-alert-action .ant-space {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Segmented chuyển đổi tab/chu kỳ trên di động */
+  .ant-segmented {
     max-width: 100% !important;
+  }
+
+  .ant-segmented .ant-segmented-item-label {
+    padding: 6px 10px !important;
+    font-size: 13px !important;
+  }
+
+  /* Thẻ gói cước hiện tại thu nhỏ padding trên mobile */
+  .plan-current.ant-card .ant-card-body {
+    padding: 16px 14px !important;
   }
 
   /* ========================================================

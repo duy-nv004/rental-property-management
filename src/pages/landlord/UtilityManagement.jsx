@@ -358,7 +358,7 @@ const UtilityManagement = () => {
     {
       title: 'Phòng & Khách',
       key: 'roomTenant',
-      width: 150,
+      width: 140,
       render: (_, record) => {
         const contract = record.contracts?.[0];
         return (
@@ -372,7 +372,7 @@ const UtilityManagement = () => {
     {
       title: 'Điện tiêu thụ (kWh)',
       key: 'electricity',
-      width: 245,
+      width: 210,
       render: (_, record) => (
         <MeterCell room={record} type="electricity" prevValue={getLatestReading(record.readings, 'electricity')} unit="kWh" />
       )
@@ -380,7 +380,7 @@ const UtilityManagement = () => {
     {
       title: 'Nước tiêu thụ (m³)',
       key: 'water',
-      width: 245,
+      width: 210,
       render: (_, record) => (
         <MeterCell room={record} type="water" prevValue={getLatestReading(record.readings, 'water')} unit="m³" />
       )
@@ -389,14 +389,14 @@ const UtilityManagement = () => {
       title: 'Tiền phòng',
       dataIndex: 'price',
       key: 'price',
-      width: 140,
+      width: 120,
       responsive: ['md'],
       render: (price) => <b>{formatVND(price)}</b>
     },
     {
       title: 'Hành động',
       key: 'action',
-      width: 140,
+      width: 120,
       fixed: 'right',
       render: (_, record) => (
         <Button
@@ -464,7 +464,7 @@ const UtilityManagement = () => {
             rowKey="id"
             loading={loading}
             pagination={false}
-            scroll={{ x: 920 }}
+            scroll={{ x: 800 }}
           />
         ) : (
           <Alert

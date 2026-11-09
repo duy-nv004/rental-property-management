@@ -143,7 +143,24 @@ export const notifications = [
   { id: 2, title: 'Sự cố đã xử lý', content: 'Wifi đã được sửa.', isRead: true, createdAt: iso('2026-09-01') },
 ];
 
-export const invoiceStatus = { stats: { totalExpected: 21500000, totalCollected: 12800000, unpaidAmount: 8700000, unpaidRooms: 2, invoiceCount: 5 } };
+export const invoiceStatus = {
+  stats: {
+    totalExpected: 21500000,
+    totalCollected: 12800000,
+    unpaidAmount: 8700000,
+    unpaidRooms: 2,
+    invoiceCount: 5,
+    netProfit: 10500000,
+    totalRepairCost: 2300000,
+    trend12Months: Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      expected: 21500000,
+      collected: 12800000,
+      repairCost: 1500000,
+      profit: 11300000,
+    })),
+  },
+};
 
 export const landlordProfile = { id: 7, name: 'E2E landlord', email: 'landlord@example.com', phone: '0909000111', plan: 'BASIC', planExpiresAt: iso('2026-12-31') };
 

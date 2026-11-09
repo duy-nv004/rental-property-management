@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Row, Col, Card, Tag, Table, Button, Spin, message, Select, Empty, Alert, Progress } from 'antd';
-import { ArrowRight, Wrench, CheckCircle2, Home, Wallet, AlertCircle, Gauge, Lightbulb, Zap } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ArrowRight, Wrench, CheckCircle2, Home, Wallet, AlertCircle, Gauge, Lightbulb, Zap, TrendingUp } from 'lucide-react';
+import { BarChart, Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
@@ -17,15 +17,32 @@ const STATUS_TAGS = {
 const BAR_COLORS = ['#94A3B8', '#0F766E', '#DC2626'];
 
 const StatCard = ({ label, value, icon, tint, footer, loading }) => (
-  <Card className="stat-card">
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-      <div style={{ minWidth: 0 }}>
-        <div className="stat-label">{label}</div>
-        <div className="stat-value" style={{ fontSize: 22 }}>{loading ? <Spin size="small" /> : value}</div>
+  <Card className="stat-card stat-card-compact" styles={{ body: { padding: '10px 14px' } }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="stat-label" style={{ fontSize: 12, color: '#64748B', lineHeight: 1.25 }}>{label}</div>
+        <div className="stat-value" style={{ fontSize: 18, fontWeight: 700, marginTop: 2, lineHeight: 1.2, color: '#0F172A' }}>
+          {loading ? <Spin size="small" /> : value}
+        </div>
       </div>
-      <div className="stat-icon" style={{ background: tint + '14', color: tint }} aria-hidden="true">{icon}</div>
+      <div
+        className="stat-icon"
+        style={{
+          background: tint + '14',
+          color: tint,
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          display: 'grid',
+          placeItems: 'center',
+          flexShrink: 0
+        }}
+        aria-hidden="true"
+      >
+        {icon}
+      </div>
     </div>
-    {footer && <div style={{ marginTop: 10 }}>{footer}</div>}
+    {footer && <div style={{ marginTop: 4 }}>{footer}</div>}
   </Card>
 );
 
@@ -152,17 +169,17 @@ const LandlordDashboard = () => {
         }
       />
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={12} lg={6}>
           <StatCard
             label={`Thực thu ${periodLabel}`}
             value={formatVND(stats?.totalCollected)}
-            icon={<Wallet size={20} />}
+            icon={<Wallet size={16} />}
             tint="#0F766E"
             loading={statsLoading}
             footer={!statsLoading && stats?.depositOffset > 0 && (
-              <div style={{ fontSize: 13, color: '#475569' }}>
-                Cấn trừ cọc: <b>{formatVND(stats.depositOffset)}</b> · Tiền mới thu: <b>{formatVND(stats.cashCollected)}</b>
+              <div style={{ fontSize: 11.5, color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Cấn trừ cọc: <b>{formatVND(stats.depositOffset)}</b> · Tiền mới: <b>{formatVND(stats.cashCollected)}</b>
               </div>
             )}
           />
@@ -171,18 +188,54 @@ const LandlordDashboard = () => {
           <StatCard
             label="Tỷ lệ lấp đầy"
             value={`${occupancyRate}%`}
-            icon={<Gauge size={20} />}
+            icon={<Gauge size={16} />}
             tint="#0369A1"
-            footer={<Progress percent={occupancyRate} showInfo={false} strokeColor="#0369A1" size={['100%', 6]} />}
+            footer={<Progress percent={occupancyRate} showInfo={false} strokeColor="#0369A1" size={['100%', 4]} style={{ margin: '2px 0 0' }} />}
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Phòng còn trống" value={`${vacantRooms} / ${totalRooms}`} icon={<Home size={20} />} tint="#15803D" />
+          <StatCard label="Phòng còn trống" value={`${vacantRooms} / ${totalRooms}`} icon={<Home size={16} />} tint="#15803D" />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Phòng nợ tiền" value={stats?.unpaidRooms ?? 0} icon={<AlertCircle size={20} />} tint="#DC2626" loading={statsLoading} />
+          <StatCard label="Phòng nợ tiền" value={stats?.unpaidRooms ?? 0} icon={<AlertCircle size={16} />} tint="#DC2626" loading={statsLoading} />
         </Col>
       </Row>
+
+      {/* Biểu đồ xu hướng doanh thu & lợi nhuận 12 tháng */}
+      {Array.isArray(stats?.trend12Months) && stats.trend12Months.length > 0 && (
+        <Card
+          title={
+            <span className="card-title">
+              <TrendingUp size={18} color="#0F766E" aria-hidden="true" /> Xu hướng doanh thu & lợi nhuận 12 tháng năm {selectedYear}
+            </span>
+          }
+          style={{ marginBottom: 20 }}
+        >
+          {statsLoading ? (
+            <div style={{ display: 'grid', placeItems: 'center', height: 260 }}><Spin /></div>
+          ) : (
+            <div className="financial-chart-container" role="img" aria-label="Biểu đồ xu hướng 12 tháng">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={stats.trend12Months} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEF2F6" />
+                  <XAxis dataKey="month" tickFormatter={(m) => `Tháng ${m}`} tick={{ fill: '#475569', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#64748B', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(val) => val ? (val / 1000000).toFixed(0) + 'M' : '0'} />
+                  <Tooltip
+                    formatter={(val, name) => [formatVND(val), name === 'collected' ? 'Đã thu' : name === 'repairCost' ? 'Chi phí sửa chữa' : name === 'profit' ? 'Lợi nhuận ròng' : 'Kỳ vọng']}
+                    labelFormatter={(label) => `Tháng ${label}/${selectedYear}`}
+                  />
+                  <Legend
+                    formatter={(value) => value === 'collected' ? 'Đã thu thực tế' : value === 'repairCost' ? 'Chi phí sửa chữa' : value === 'profit' ? 'Lợi nhuận ròng' : value}
+                  />
+                  <Bar dataKey="collected" fill="#0F766E" radius={[4, 4, 0, 0]} barSize={24} name="collected" />
+                  <Bar dataKey="repairCost" fill="#EA580C" radius={[4, 4, 0, 0]} barSize={24} name="repairCost" />
+                  <Line type="monotone" dataKey="profit" stroke="#15803D" strokeWidth={3} dot={{ r: 4, fill: '#15803D' }} name="profit" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Card>
+      )}
 
       <Row gutter={[20, 20]} style={{ marginBottom: 20 }}>
         <Col xs={24} lg={14}>

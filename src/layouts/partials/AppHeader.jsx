@@ -156,7 +156,7 @@ const AppHeader = ({ isMobile, onMenuClick, roleLabel, profilePath, withNotifica
               </button>
               <Drawer
                 title={
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: 36 }}>
                     <span style={{ fontWeight: 700, fontSize: 16 }}>Thông báo</span>
                     {unreadCount > 0 && <Button type="link" size="small" onClick={markAllRead}>Đánh dấu đã đọc</Button>}
                   </div>

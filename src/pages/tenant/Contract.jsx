@@ -383,26 +383,28 @@ const TenantContract = () => {
         <div className="paper-section">
           <strong>ĐIỀU 3: DANH SÁCH ĐỒ DÙNG VÀ THIẾT BỊ BÊN A BÀN GIAO</strong><br />
           {parseInventory(contract.inventory).length > 0 ? (
-            <table className="inv-table">
-              <thead>
-                <tr>
-                  <th className="c col-stt">STT</th>
-                  <th>Tên loại thiết bị</th>
-                  <th className="c col-qty">Số lượng</th>
-                  <th>Tình trạng bàn giao</th>
-                </tr>
-              </thead>
-              <tbody>
-                {parseInventory(contract.inventory).map((item, index) => (
-                  <tr key={index}>
-                    <td className="c">{index + 1}</td>
-                    <td>{item.name}</td>
-                    <td className="c">{item.quantity}</td>
-                    <td>{item.status}</td>
+            <div className="scroll-x">
+              <table className="inv-table">
+                <thead>
+                  <tr>
+                    <th className="c col-stt">STT</th>
+                    <th>Tên loại thiết bị</th>
+                    <th className="c col-qty">Số lượng</th>
+                    <th>Tình trạng bàn giao</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {parseInventory(contract.inventory).map((item, index) => (
+                    <tr key={index}>
+                      <td className="c">{index + 1}</td>
+                      <td>{item.name}</td>
+                      <td className="c">{item.quantity}</td>
+                      <td>{item.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <span>Không bàn giao thiết bị đặc biệt nào kèm theo.</span>
           )}
