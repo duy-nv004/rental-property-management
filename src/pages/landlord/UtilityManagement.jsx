@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Table, Select, InputNumber, Button, Space, message, Modal, Tag, Alert, Card, Upload, Tooltip, DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { Calculator, CheckCircle2, Save, Camera, ArrowRight } from 'lucide-react';
+import { Calculator, CheckCircle2, Save, Camera, ArrowRight, AlertTriangle } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 import { computeMeterUsage, buildMeterSyncPayload } from '../../utils/contracts';
@@ -21,6 +21,8 @@ const UtilityManagement = () => {
   const [readingsInput, setReadingsInput] = useState({});
   const [savingRoomId, setSavingRoomId] = useState(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkInvoiceLoading, setBulkInvoiceLoading] = useState(false);
+  const [bulkInvoiceSummary, setBulkInvoiceSummary] = useState(null);
 
   const [invoiceResult, setInvoiceResult] = useState(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
@@ -280,6 +282,33 @@ const UtilityManagement = () => {
     }
   };
 
+  const handleBulkGenerateInvoices = async () => {
+    if (!selectedBuildingId) {
+      message.warning('Vui lòng chọn tòa nhà trước khi xuất hóa đơn hàng loạt.');
+      return;
+    }
+    setBulkInvoiceLoading(true);
+    try {
+      const res = await axiosInstance.post('/invoices/generate-bulk', {
+        buildingId: selectedBuildingId,
+        month: currentMonth,
+        year: currentYear,
+      });
+      setBulkInvoiceSummary(res);
+      const summary = res?.summary || {};
+      if ((summary.createdCount || 0) > 0) {
+        message.success(res?.message || `Đã xuất ${summary.createdCount} hóa đơn cho tháng ${currentMonth}/${currentYear}!`);
+      } else {
+        message.info(res?.message || 'Không có hóa đơn mới nào cần xuất trong kỳ này.');
+      }
+      await fetchData();
+    } catch (err) {
+      message.error(err.response?.data?.message || 'Không thể xuất hóa đơn hàng loạt.');
+    } finally {
+      setBulkInvoiceLoading(false);
+    }
+  };
+
   const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
 
   // Danh sách phòng đang thuê của tòa nhà được chọn
@@ -344,8 +373,9 @@ const UtilityManagement = () => {
           )}
           {anomaly && (
             <Tooltip title={`Tiêu thụ ${anomaly.used} ${unit}, tăng ${anomaly.percent}% so với mức trung bình (${anomaly.avg} ${unit}). Vui lòng kiểm tra lại đồng hồ hoặc xem có sự cố rò rỉ không!`}>
-              <Tag color="warning" style={{ fontSize: 11, cursor: 'help' }}>
-                ⚠️ {anomaly.msg}
+              <Tag color="warning" style={{ fontSize: 11, cursor: 'help', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <AlertTriangle size={12} aria-hidden="true" />
+                {anomaly.msg}
               </Tag>
             </Tooltip>
           )}
@@ -452,6 +482,14 @@ const UtilityManagement = () => {
             >
               Chốt toàn bộ tòa nhà
             </Button>
+            <Button
+              icon={<Calculator size={16} />}
+              loading={bulkInvoiceLoading}
+              disabled={!selectedBuildingId || filteredRooms.length === 0}
+              onClick={handleBulkGenerateInvoices}
+            >
+              Xuất hóa đơn hàng loạt
+            </Button>
           </div>
         }
       />
@@ -511,6 +549,72 @@ const UtilityManagement = () => {
               message="Đã gửi Telegram & tích hợp SePay"
               description="Thông báo kèm mã VietQR đã được gửi tới khách thuê. Khi khách quét QR thanh toán, SePay tự động gạch nợ và cập nhật doanh thu."
             />
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL KẾT QUẢ XUẤT HÓA ĐƠN HÀNG LOẠT */}
+      <Modal
+        title={`Kết quả xuất hóa đơn hàng loạt — Tháng ${currentMonth}/${currentYear}`}
+        open={!!bulkInvoiceSummary}
+        onCancel={() => setBulkInvoiceSummary(null)}
+        footer={[
+          <Button key="invoices" icon={<ArrowRight size={15} />} onClick={() => { setBulkInvoiceSummary(null); navigate('/landlord/invoices'); }}>
+            Xem danh sách hóa đơn
+          </Button>,
+          <Button key="close" type="primary" onClick={() => setBulkInvoiceSummary(null)}>
+            Đóng
+          </Button>,
+        ]}
+        width={620}
+        centered
+      >
+        {bulkInvoiceSummary && (
+          <div style={{ display: 'grid', gap: 14 }}>
+            <Space wrap>
+              <Tag color="green">Đã xuất mới: {bulkInvoiceSummary.summary?.createdCount || 0}</Tag>
+              <Tag color="blue">Đã bỏ qua (đã có / thiếu chỉ số): {bulkInvoiceSummary.summary?.skippedCount || 0}</Tag>
+              <Tag color="red">Thất bại: {bulkInvoiceSummary.summary?.failedCount || 0}</Tag>
+            </Space>
+
+            {Array.isArray(bulkInvoiceSummary.created) && bulkInvoiceSummary.created.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Hóa đơn vừa tạo</div>
+                <div style={{ display: 'grid', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
+                  {bulkInvoiceSummary.created.map((item) => (
+                    <div key={item.invoiceId || item.roomId} style={{ fontSize: 13, color: '#0f172a', padding: '6px 10px', background: '#f0fdf4', borderRadius: 6 }}>
+                      Phòng {item.roomNumber || item.roomId} — {formatVND(item.total)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(bulkInvoiceSummary.skipped) && bulkInvoiceSummary.skipped.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Phòng được bỏ qua</div>
+                <div style={{ display: 'grid', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
+                  {bulkInvoiceSummary.skipped.map((item) => (
+                    <div key={`${item.roomId}-${item.reason}`} style={{ fontSize: 13, color: '#334155', padding: '6px 10px', background: '#f8fafc', borderRadius: 6 }}>
+                      Phòng {item.roomNumber || item.roomId}: {item.reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(bulkInvoiceSummary.failed) && bulkInvoiceSummary.failed.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 6, color: '#b91c1c' }}>Phòng lỗi</div>
+                <div style={{ display: 'grid', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
+                  {bulkInvoiceSummary.failed.map((item) => (
+                    <div key={`${item.roomId}-${item.message}`} style={{ fontSize: 13, color: '#991b1b', padding: '6px 10px', background: '#fef2f2', borderRadius: 6 }}>
+                      Phòng {item.roomNumber || item.roomId}: {item.message}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>

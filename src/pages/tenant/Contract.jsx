@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Spin, Row, Col, Divider, Tag, Empty, Button, Alert, message, Input, Modal, Select, DatePicker, List, Space } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { Card, Spin, Row, Col, Tag, Empty, Button, Alert, message, Input, Modal, Select, DatePicker, List, Space } from 'antd';
 import dayjs from 'dayjs';
-import { FileSignature, ShieldCheck, Clock, AlertTriangle, XCircle, Printer, History } from 'lucide-react';
+import { FileSignature, ShieldCheck, Clock, AlertTriangle, XCircle, Printer, History, CalendarCheck, Building2, UploadCloud } from 'lucide-react';
 import '../../styles/tenant.css';
 import axiosInstance from '../../utils/axios';
 import SignaturePadModal from '../../components/common/SignaturePadModal';
@@ -15,8 +16,10 @@ const CONTRACT_STATUS_LABEL = {
 };
 
 const TenantContract = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+  const [bookings, setBookings] = useState([]);
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
   const [signLoading, setSignLoading] = useState(false);
 
@@ -27,6 +30,16 @@ const TenantContract = () => {
 
   // Hợp đồng đang xem khi khách thuê nhiều phòng; null = để backend chọn mặc định
   const [selectedContractId, setSelectedContractId] = useState(null);
+
+  // Tải lên CCCD 2 mặt & AI OCR khi tự ký hợp đồng
+  const [cccdFrontFile, setCccdFrontFile] = useState(null);
+  const [cccdBackFile, setCccdBackFile] = useState(null);
+  const [cccdFrontPreview, setCccdFrontPreview] = useState('');
+  const [cccdBackPreview, setCccdBackPreview] = useState('');
+  const [tenantCccdInput, setTenantCccdInput] = useState('');
+  const [tenantDobInput, setTenantDobInput] = useState('');
+  const [tenantHometownInput, setTenantHometownInput] = useState('');
+  const [cccdScanLoading, setCccdScanLoading] = useState(false);
 
   const fetchContract = useCallback(async () => {
     setLoading(true);
@@ -63,9 +76,82 @@ const TenantContract = () => {
     }
   }, []);
 
+  const fetchBookings = useCallback(async () => {
+    try {
+      const list = await axiosInstance.get('/tenant/bookings');
+      setBookings(Array.isArray(list) ? list : []);
+    } catch {
+      setBookings([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchRequests();
-  }, [fetchRequests]);
+    fetchBookings();
+  }, [fetchRequests, fetchBookings]);
+
+  useEffect(() => {
+    const onDataChanged = () => {
+      fetchContract();
+      fetchRequests();
+      fetchBookings();
+    };
+    window.addEventListener('app:data-changed', onDataChanged);
+    return () => window.removeEventListener('app:data-changed', onDataChanged);
+  }, [fetchContract, fetchRequests, fetchBookings]);
+
+  const handleSelectCccdFile = (side, file) => {
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    if (side === 'front') {
+      if (cccdFrontPreview) URL.revokeObjectURL(cccdFrontPreview);
+      setCccdFrontFile(file);
+      setCccdFrontPreview(previewUrl);
+    } else {
+      if (cccdBackPreview) URL.revokeObjectURL(cccdBackPreview);
+      setCccdBackFile(file);
+      setCccdBackPreview(previewUrl);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cccdFrontPreview) URL.revokeObjectURL(cccdFrontPreview);
+      if (cccdBackPreview) URL.revokeObjectURL(cccdBackPreview);
+    };
+  }, [cccdFrontPreview, cccdBackPreview]);
+
+  const handleScanCccdByAi = async () => {
+    if (!cccdFrontFile && !cccdBackFile) {
+      return message.warning('Vui lòng chọn ít nhất một ảnh CCCD trước khi quét AI.');
+    }
+    setCccdScanLoading(true);
+    try {
+      const fd = new FormData();
+      if (cccdFrontFile) fd.append('cccdImages', cccdFrontFile);
+      if (cccdBackFile) fd.append('cccdImages', cccdBackFile);
+      const res = await axiosInstance.post('/ai/scan-cccd', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res?.data) {
+        const { cccdNumber, dob, hometown } = res.data;
+        if (cccdNumber) setTenantCccdInput(cccdNumber);
+        if (dob) setTenantDobInput(dob);
+        if (hometown) setTenantHometownInput(hometown);
+        if (Array.isArray(res.warnings) && res.warnings.length > 0) {
+          message.warning(`Vui lòng kiểm tra lại: ${res.warnings.join(' ')}`);
+        } else {
+          message.success('AI đã trích xuất thông tin CCCD thành công!');
+        }
+      } else {
+        message.warning('AI không trích xuất được thông tin, bạn có thể nhập tay bên dưới.');
+      }
+    } catch (err) {
+      message.error(err.response?.data?.message || 'Không thể quét ảnh CCCD lúc này.');
+    } finally {
+      setCccdScanLoading(false);
+    }
+  };
 
   const openRequest = (type) => {
     // Khách ở tới hết kỳ thanh toán: mặc định trả phòng ngày cuối tháng hiện tại
@@ -95,11 +181,34 @@ const TenantContract = () => {
     if (!data?.contract?.id) return;
     setSignLoading(true);
     try {
-      await axiosInstance.post(`/tenant/contract/${data.contract.id}/sign`, {
-        signature: signatureBase64
-      });
+      const hasCccdOrFields =
+        cccdFrontFile ||
+        cccdBackFile ||
+        tenantCccdInput.trim() ||
+        tenantDobInput.trim() ||
+        tenantHometownInput.trim();
+      if (hasCccdOrFields) {
+        const fd = new FormData();
+        fd.append('signature', signatureBase64);
+        if (cccdFrontFile) fd.append('cccdFront', cccdFrontFile);
+        if (cccdBackFile) fd.append('cccdBack', cccdBackFile);
+        if (tenantCccdInput.trim()) fd.append('tenantCccd', tenantCccdInput.trim());
+        if (tenantDobInput.trim()) fd.append('tenantDob', tenantDobInput.trim());
+        if (tenantHometownInput.trim()) fd.append('tenantHometown', tenantHometownInput.trim());
+        await axiosInstance.post(`/tenant/contract/${data.contract.id}/sign`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await axiosInstance.post(`/tenant/contract/${data.contract.id}/sign`, {
+          signature: signatureBase64,
+        });
+      }
       message.success('Ký hợp đồng thành công! Hợp đồng thuê phòng của bạn đã chính thức có hiệu lực.');
       setSignatureModalVisible(false);
+      setCccdFrontFile(null);
+      setCccdBackFile(null);
+      setCccdFrontPreview('');
+      setCccdBackPreview('');
       fetchContract();
     } catch (err) {
       console.error('Error signing contract:', err);
@@ -111,6 +220,10 @@ const TenantContract = () => {
 
   const handleRejectContract = async () => {
     if (!data?.contract?.id) return;
+    if (rejectReason.trim().length < 5) {
+      message.warning('Vui lòng nhập lý do từ chối (tối thiểu 5 ký tự)!');
+      return;
+    }
     setRejectLoading(true);
     try {
       await axiosInstance.post(`/tenant/contract/${data.contract.id}/reject`, {
@@ -137,6 +250,87 @@ const TenantContract = () => {
     return new Date(dateStr).toLocaleDateString('vi-VN');
   };
 
+  const bookingStatusMap = {
+    pending: { color: 'gold', text: 'Chờ chủ nhà xác nhận' },
+    confirmed: { color: 'cyan', text: 'Đã xác nhận lịch hẹn' },
+    deposit_paid: { color: 'green', text: 'Đã nhận cọc — Chờ chủ nhà lập HĐ' },
+    deposit_conflict: { color: 'volcano', text: 'Trùng giữ chỗ — Chờ hoàn cọc' },
+    contract_created: { color: 'blue', text: 'Đã lập hợp đồng' },
+    rejected: { color: 'red', text: 'Đã từ chối' },
+    cancelled: { color: 'default', text: 'Đã hủy' },
+  };
+
+  const renderBookingsCard = () => {
+    if (!bookings.length) return null;
+    return (
+      <Card
+        title={
+          <Space size={8}>
+            <CalendarCheck size={18} color="#0F766E" aria-hidden="true" />
+            <span>Lịch hẹn xem phòng &amp; Đặt cọc của tôi</span>
+          </Space>
+        }
+        extra={
+          <Button size="small" icon={<Building2 size={14} aria-hidden="true" />} onClick={() => navigate('/rooms')}>
+            Khám phá thêm phòng trống
+          </Button>
+        }
+        style={{ marginBottom: 18 }}
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          {bookings.map((b) => {
+            const st = bookingStatusMap[b.status] || { color: 'default', text: b.status };
+            const roomNum = b.room?.roomNumber || b.roomId;
+            const bldName = b.building?.name || b.room?.building?.name || '';
+            const bldAddr = [b.building?.address, b.building?.district, b.building?.city].filter(Boolean).join(', ');
+            const dateVal = b.type === 'viewing' ? b.viewingDate : b.moveInDate;
+
+            return (
+              <div
+                key={b.id}
+                data-testid={`tenant-booking-${b.id}`}
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 10,
+                  padding: '12px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                  background: '#f8fafc',
+                }}
+              >
+                <div>
+                  <Space size={6} wrap style={{ marginBottom: 4 }}>
+                    <Tag color={b.type === 'deposit' ? 'purple' : 'geekblue'}>
+                      {b.type === 'deposit' ? 'Đặt cọc giữ phòng' : 'Đặt lịch xem phòng'}
+                    </Tag>
+                    <Tag color={st.color}>{st.text}</Tag>
+                  </Space>
+                  <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                    Phòng {roomNum}{bldName ? ` · ${bldName}` : ''}
+                  </div>
+                  {bldAddr && <div style={{ fontSize: 13, color: '#475569' }}>{bldAddr}</div>}
+                  {dateVal && (
+                    <div style={{ fontSize: 13, color: '#475569' }}>
+                      {b.type === 'viewing' ? 'Ngày hẹn xem:' : 'Dự kiến dọn vào:'} {formatDate(dateVal)}
+                    </div>
+                  )}
+                  {b.type === 'deposit' && (
+                    <div style={{ fontSize: 13, color: '#0f766e', fontWeight: 600 }}>
+                      Tiền cọc: {formatVND(b.depositAmount)} {b.transferCode ? `· Nội dung CK: ${b.transferCode}` : ''}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    );
+  };
+
   if (loading) {
     return (
       <div className="loading-center">
@@ -148,11 +342,20 @@ const TenantContract = () => {
   if (!data || !data.contract) {
     return (
       <div className="page-shell page-shell-tight">
+        {renderBookingsCard()}
         <Card className="empty-card" variant="borderless">
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="Tài khoản hiện chưa có hợp đồng thuê nào."
-          />
+            description={
+              bookings.length > 0
+                ? 'Bạn chưa có hợp đồng chính thức. Khi chủ nhà lập hợp đồng từ lịch đặt cọc, hợp đồng sẽ hiển thị tại đây để bạn ký.'
+                : 'Tài khoản hiện chưa có hợp đồng thuê nào.'
+            }
+          >
+            <Button type="primary" onClick={() => navigate('/rooms')}>
+              Khám phá phòng trống
+            </Button>
+          </Empty>
         </Card>
       </div>
     );
@@ -188,6 +391,8 @@ const TenantContract = () => {
           </div>
         )}
       </div>
+
+      {renderBookingsCard()}
 
       {/* Có hợp đồng chờ ký ở phòng khác: cho chuyển sang xem thay vì ký nhầm hợp đồng đang hiển thị */}
       {hasPendingContract && !isViewingPending && (
@@ -359,6 +564,28 @@ const TenantContract = () => {
           - Điện thoại: {contract.tenantPhone || profile?.phone || 'N/A'}<br />
           - CCCD số: {contract.tenantCccd || 'Chưa cung cấp'} {contract.tenantDob && ` - Ngày sinh: ${contract.tenantDob}`}<br />
           - HK thường trú: {contract.tenantHometown || 'N/A'}
+          {(contract.cccdFrontUrl || contract.cccdBackUrl) && (
+            <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
+              {contract.cccdFrontUrl && (
+                <a href={contract.cccdFrontUrl} target="_blank" rel="noreferrer">
+                  <img
+                    src={contract.cccdFrontUrl}
+                    alt="CCCD mặt trước"
+                    style={{ width: 132, height: 84, objectFit: 'cover', borderRadius: 6, border: '1px solid #cbd5e1' }}
+                  />
+                </a>
+              )}
+              {contract.cccdBackUrl && (
+                <a href={contract.cccdBackUrl} target="_blank" rel="noreferrer">
+                  <img
+                    src={contract.cccdBackUrl}
+                    alt="CCCD mặt sau"
+                    style={{ width: 132, height: 84, objectFit: 'cover', borderRadius: 6, border: '1px solid #cbd5e1' }}
+                  />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="paper-section">
@@ -425,6 +652,120 @@ const TenantContract = () => {
             Ngày thanh lý: {contract.terminatedAt ? formatDate(contract.terminatedAt) : 'N/A'}<br />
             Tình trạng: Hợp đồng đã hoàn tất thủ tục trả phòng và thanh lý.
           </div>
+        )}
+
+        {isViewingPending && (!contract.tenantCccdFront || !contract.tenantCccdBack) && (
+          <Card
+            size="small"
+            className="no-print"
+            style={{
+              marginTop: 18,
+              marginBottom: 14,
+              borderColor: '#99f6e4',
+              background: '#f0fdfa',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              <div>
+                <div style={{ fontWeight: 700, color: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <UploadCloud size={17} color="#0f766e" aria-hidden="true" />
+                  Bổ sung ảnh CCCD 2 mặt trước khi ký hợp đồng
+                </div>
+                <div style={{ fontSize: 13, color: '#475569' }}>
+                  Hợp đồng chưa có đủ 2 mặt CCCD từ chủ nhà. Vui lòng tải lên mặt trước &amp; mặt sau (có thể bấm Quét AI để tự điền).
+                </div>
+              </div>
+              <Button
+                size="small"
+                loading={cccdScanLoading}
+                disabled={!cccdFrontFile && !cccdBackFile}
+                onClick={handleScanCccdByAi}
+              >
+                Quét CCCD bằng AI
+              </Button>
+            </div>
+
+            <Row gutter={[12, 12]}>
+              <Col xs={24} sm={12}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                  CCCD Mặt trước
+                </label>
+                <div style={{ border: '1px dashed #0f766e', borderRadius: 8, padding: 10, background: '#fff' }}>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/*"
+                    data-testid="tenant-cccd-front"
+                    onChange={(e) => handleSelectCccdFile('front', e.target.files?.[0])}
+                  />
+                  {cccdFrontPreview && (
+                    <img
+                      src={cccdFrontPreview}
+                      alt="Xem trước CCCD mặt trước"
+                      style={{ marginTop: 8, width: '100%', maxHeight: 110, objectFit: 'cover', borderRadius: 6 }}
+                    />
+                  )}
+                </div>
+              </Col>
+              <Col xs={24} sm={12}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                  CCCD Mặt sau
+                </label>
+                <div style={{ border: '1px dashed #0f766e', borderRadius: 8, padding: 10, background: '#fff' }}>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/*"
+                    data-testid="tenant-cccd-back"
+                    onChange={(e) => handleSelectCccdFile('back', e.target.files?.[0])}
+                  />
+                  {cccdBackPreview && (
+                    <img
+                      src={cccdBackPreview}
+                      alt="Xem trước CCCD mặt sau"
+                      style={{ marginTop: 8, width: '100%', maxHeight: 110, objectFit: 'cover', borderRadius: 6 }}
+                    />
+                  )}
+                </div>
+              </Col>
+            </Row>
+
+            <Row gutter={[12, 10]} style={{ marginTop: 12 }}>
+              <Col xs={24} sm={8}>
+                <label htmlFor="tenant-cccd-input" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                  Số CCCD
+                </label>
+                <Input
+                  id="tenant-cccd-input"
+                  inputMode="numeric"
+                  maxLength={12}
+                  placeholder="12 chữ số (tự điền AI)"
+                  value={tenantCccdInput}
+                  onChange={(e) => setTenantCccdInput(e.target.value)}
+                />
+              </Col>
+              <Col xs={24} sm={8}>
+                <label htmlFor="tenant-dob-input" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                  Ngày sinh
+                </label>
+                <Input
+                  id="tenant-dob-input"
+                  placeholder="DD/MM/YYYY"
+                  value={tenantDobInput}
+                  onChange={(e) => setTenantDobInput(e.target.value)}
+                />
+              </Col>
+              <Col xs={24} sm={8}>
+                <label htmlFor="tenant-hometown-input" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                  Quê quán / Thường trú
+                </label>
+                <Input
+                  id="tenant-hometown-input"
+                  placeholder="Nhập địa chỉ thường trú"
+                  value={tenantHometownInput}
+                  onChange={(e) => setTenantHometownInput(e.target.value)}
+                />
+              </Col>
+            </Row>
+          </Card>
         )}
 
         <div className="paper-signs">
@@ -497,9 +838,9 @@ const TenantContract = () => {
           </span>
         }
         open={rejectModalVisible}
-        onCancel={() => setRejectModalVisible(false)}
+        onCancel={() => { setRejectModalVisible(false); setRejectReason(''); }}
         footer={[
-          <Button key="cancel" onClick={() => setRejectModalVisible(false)}>
+          <Button key="cancel" onClick={() => { setRejectModalVisible(false); setRejectReason(''); }}>
             Hủy
           </Button>,
           <Button
@@ -507,6 +848,7 @@ const TenantContract = () => {
             type="primary"
             danger
             loading={rejectLoading}
+            disabled={rejectReason.trim().length < 5}
             onClick={handleRejectContract}
           >
             Xác nhận từ chối
@@ -514,13 +856,20 @@ const TenantContract = () => {
         ]}
         width={450}
         centered
+        destroyOnHidden
       >
         <p className="modal-note">
           Bạn có chắc chắn muốn từ chối ký hợp đồng này? Vui lòng nhập lý do từ chối để thông báo tới chủ nhà:
         </p>
+        <label htmlFor="contract-reject-reason" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#0F172A', marginBottom: 6 }}>
+          Lý do từ chối <span style={{ color: '#DC2626' }}>*</span>
+        </label>
         <Input.TextArea
+          id="contract-reject-reason"
           rows={3}
-          placeholder="Nhập lý do từ chối (Ví dụ: Đơn giá không đúng thỏa thuận, thông tin phòng sai...)"
+          maxLength={500}
+          showCount
+          placeholder="Nhập lý do từ chối (tối thiểu 5 ký tự, VD: Đơn giá không đúng thỏa thuận...)"
           value={rejectReason}
           onChange={(e) => setRejectReason(e.target.value)}
         />
@@ -596,12 +945,6 @@ const REQUEST_STATUS = {
   pending: { color: 'gold', text: 'Chờ duyệt' },
   approved: { color: 'green', text: 'Đã đồng ý' },
   rejected: { color: 'red', text: 'Bị từ chối' }
-};
-const DEPOSIT_STATUS = {
-  held: { color: 'blue', text: 'Đang giữ' },
-  refunded: { color: 'green', text: 'Đã hoàn' },
-  deducted: { color: 'orange', text: 'Khấu trừ' },
-  forfeited: { color: 'red', text: 'Mất cọc' }
 };
 
 export default TenantContract;

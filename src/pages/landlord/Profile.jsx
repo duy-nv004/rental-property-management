@@ -3,6 +3,7 @@ import { Row, Col, Card, Form, Input, Button, message, Avatar, Spin, Alert } fro
 import { User, KeyRound, Save, Send, CheckCircle2, Smartphone } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
+import { VN_PHONE_RULE, CCCD_RULE, DOB_RULE } from '../../utils/formRules';
 
 const LandlordProfile = () => {
   const [profileForm] = Form.useForm();
@@ -123,16 +124,16 @@ const LandlordProfile = () => {
                 <Input placeholder="ban@example.com" autoComplete="email" />
               </Form.Item>
 
-              <Form.Item name="phone" label="Số điện thoại liên hệ">
+              <Form.Item name="phone" label="Số điện thoại liên hệ" rules={[VN_PHONE_RULE]}>
                 <Input placeholder="Ví dụ: 0987654321" inputMode="numeric" autoComplete="tel" />
               </Form.Item>
 
-              <Form.Item name="cccd" label="Số CCCD chủ nhà">
-                <Input placeholder="Ví dụ: 001196008731" inputMode="numeric" />
+              <Form.Item name="cccd" label="Số CCCD chủ nhà" rules={[CCCD_RULE]}>
+                <Input placeholder="12 chữ số (VD: 001196008731)" inputMode="numeric" maxLength={12} />
               </Form.Item>
 
-              <Form.Item name="dob" label="Ngày tháng năm sinh">
-                <Input placeholder="Ví dụ: 10/05/1985" />
+              <Form.Item name="dob" label="Ngày tháng năm sinh" rules={[DOB_RULE]}>
+                <Input placeholder="DD/MM/YYYY (VD: 10/05/1985)" />
               </Form.Item>
 
               <Form.Item name="hometown" label="Hộ khẩu thường trú">

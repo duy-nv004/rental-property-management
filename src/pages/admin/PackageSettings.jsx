@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Row, Col, Card, InputNumber, Button, Form, Radio, message, Spin, Tag, Grid } from 'antd';
-import { ShieldCheck, Cpu, Save } from 'lucide-react';
+import { ShieldCheck, Cpu, Save, Bot } from 'lucide-react';
 import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
@@ -14,6 +14,7 @@ const TIERS = {
 const PackageCard = ({ plan, onSave }) => {
   const [form] = Form.useForm();
   const [aiLimitType, setAiLimitType] = useState(plan.maxAICallsPerMonth === -1 ? 'unlimited' : 'limited');
+  const [chatLimitType, setChatLimitType] = useState(plan.maxChatCallsPerMonth === -1 ? 'unlimited' : 'limited');
   const [submitLoading, setSubmitLoading] = useState(false);
   const isPhone = !Grid.useBreakpoint().md;
 
@@ -23,9 +24,11 @@ const PackageCard = ({ plan, onSave }) => {
       annualPrice: Number(plan.annualPrice),
       maxBuildings: plan.maxBuildings,
       maxRoomsPerBuilding: plan.maxRoomsPerBuilding,
-      maxAICallsPerMonth: plan.maxAICallsPerMonth === -1 ? 30 : plan.maxAICallsPerMonth
+      maxAICallsPerMonth: plan.maxAICallsPerMonth === -1 ? 30 : plan.maxAICallsPerMonth,
+      maxChatCallsPerMonth: plan.maxChatCallsPerMonth === -1 ? 100 : (plan.maxChatCallsPerMonth ?? 20)
     });
     setAiLimitType(plan.maxAICallsPerMonth === -1 ? 'unlimited' : 'limited');
+    setChatLimitType(plan.maxChatCallsPerMonth === -1 ? 'unlimited' : 'limited');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan]);
 
@@ -37,7 +40,8 @@ const PackageCard = ({ plan, onSave }) => {
         annualPrice: values.annualPrice,
         maxBuildings: values.maxBuildings,
         maxRoomsPerBuilding: values.maxRoomsPerBuilding,
-        maxAICallsPerMonth: aiLimitType === 'unlimited' ? -1 : values.maxAICallsPerMonth
+        maxAICallsPerMonth: aiLimitType === 'unlimited' ? -1 : values.maxAICallsPerMonth,
+        maxChatCallsPerMonth: chatLimitType === 'unlimited' ? -1 : values.maxChatCallsPerMonth
       };
       await onSave(plan.id, payload);
       message.success(`Đã cập nhật cấu hình gói ${plan.name.toUpperCase()} thành công!`);
@@ -124,6 +128,32 @@ const PackageCard = ({ plan, onSave }) => {
           )}
         </div>
 
+        <div style={{ marginBottom: 20, background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #EEF2F6' }}>
+          <div id={`chat-limit-${plan.id}`} style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Bot size={16} color="#0369A1" aria-hidden="true" /> Giới hạn câu hỏi trợ lý AI Chat
+          </div>
+          <Radio.Group
+            aria-labelledby={`chat-limit-${plan.id}`}
+            value={chatLimitType}
+            onChange={(e) => setChatLimitType(e.target.value)}
+            style={{ marginBottom: chatLimitType === 'limited' ? 12 : 0 }}
+          >
+            <Radio value="unlimited">Không giới hạn</Radio>
+            <Radio value="limited">Giới hạn</Radio>
+          </Radio.Group>
+
+          {chatLimitType === 'limited' && (
+            <Form.Item
+              name="maxChatCallsPerMonth"
+              label="Số câu hỏi / tháng"
+              rules={[{ required: true, message: 'Nhập số câu hỏi AI Chat!' }]}
+              style={{ marginBottom: 0 }}
+            >
+              {numberInput(0)}
+            </Form.Item>
+          )}
+        </div>
+
         <Button type={featured ? 'primary' : 'default'} htmlType="submit" loading={submitLoading} icon={<Save size={16} />} block size={isPhone ? 'large' : 'middle'}>
           Lưu thay đổi
         </Button>
@@ -141,6 +171,7 @@ PackageCard.propTypes = {
     maxBuildings: PropTypes.number,
     maxRoomsPerBuilding: PropTypes.number,
     maxAICallsPerMonth: PropTypes.number,
+    maxChatCallsPerMonth: PropTypes.number,
   }),
   onSave: PropTypes.func,
 };

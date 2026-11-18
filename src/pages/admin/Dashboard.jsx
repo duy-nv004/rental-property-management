@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Row, Col, Card, Progress, Spin, Empty, message } from 'antd';
-import { Users, Wallet, CheckCircle2, TrendingUp, Activity } from 'lucide-react';
+import { Row, Col, Card, Progress, Spin, Empty, Button, Popconfirm, Tag, message } from 'antd';
+import { Users, Wallet, CheckCircle2, TrendingUp, Activity, Database, RefreshCw, AlertTriangle } from 'lucide-react';
 import PropTypes from 'prop-types';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
@@ -76,17 +76,192 @@ ActivityItem.propTypes = {
   }),
 };
 
+const CacheMetricBox = ({ label, value, sub, testId }) => (
+  <div
+    style={{
+      padding: '12px 14px',
+      borderRadius: 10,
+      background: '#F8FAFC',
+      border: '1px solid #E2E8F0',
+      minWidth: 0,
+    }}
+  >
+    <div style={{ fontSize: 12, fontWeight: 500, color: '#475569', marginBottom: 4 }}>{label}</div>
+    <div
+      data-testid={testId}
+      style={{ fontSize: 20, fontWeight: 700, color: '#0F172A', lineHeight: 1.25, wordBreak: 'break-word' }}
+    >
+      {value}
+    </div>
+    {sub && <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>{sub}</div>}
+  </div>
+);
+
+CacheMetricBox.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  sub: PropTypes.string,
+  testId: PropTypes.string,
+};
+
+const RedisCachePanel = ({ cacheData, flushing, onFlush }) => {
+  const redis = cacheData?.redis || {};
+  const metrics = cacheData?.metrics || {};
+  const isRealRedis = redis.mode === 'redis' && redis.connected !== false;
+  const isDisconnected = redis.connected === false;
+
+  let statusText = 'In-Memory Fallback';
+  let statusColor = '#92400E';
+  let statusBg = '#FEF3C7';
+  let statusBorder = '#FDE68A';
+  let StatusIcon = AlertTriangle;
+
+  if (isDisconnected) {
+    statusText = 'Mất Kết Nối Redis';
+    statusColor = '#991B1B';
+    statusBg = '#FEE2E2';
+    statusBorder = '#FECACA';
+    StatusIcon = AlertTriangle;
+  } else if (isRealRedis) {
+    statusText = 'Redis Đang Hoạt Động';
+    statusColor = '#0F766E';
+    statusBg = '#F0FDFA';
+    statusBorder = '#99F6E4';
+    StatusIcon = CheckCircle2;
+  }
+
+  const hits = Number(metrics.hits) || 0;
+  const misses = Number(metrics.misses) || 0;
+  const hitRate = Number(metrics.hitRate) || 0;
+  const latencyText = redis.latencyMs != null ? `${redis.latencyMs} ms` : '—';
+  const keysText = redis.keyCount != null ? redis.keyCount : 0;
+  const memoryText = redis.memoryUsed || (isRealRedis ? 'Đang đo' : 'RAM nội bộ');
+
+  return (
+    <Card
+      data-testid="redis-cache-card"
+      style={{ marginTop: 20 }}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="card-title">
+            <Database size={18} color="#0F766E" aria-hidden="true" /> Bộ nhớ đệm Redis & Hiệu năng
+          </span>
+          <Tag
+            role="status"
+            aria-atomic="true"
+            data-testid="redis-status-badge"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              margin: 0,
+              padding: '3px 10px',
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 600,
+              color: statusColor,
+              background: statusBg,
+              border: `1px solid ${statusBorder}`,
+            }}
+          >
+            <StatusIcon size={14} aria-hidden="true" />
+            <span>{statusText}</span>
+          </Tag>
+        </div>
+      }
+      extra={
+        <Popconfirm
+          title="Xóa toàn bộ bộ nhớ đệm?"
+          description="Thống kê và cấu hình gói sẽ được nạp lại từ MySQL ở lượt truy cập kế tiếp."
+          onConfirm={onFlush}
+          okText="Xác nhận"
+          cancelText="Hủy"
+        >
+          <Button
+            type="default"
+            data-testid="redis-flush-btn"
+            loading={flushing}
+            aria-busy={flushing}
+            icon={<RefreshCw size={15} aria-hidden="true" />}
+            style={{ minHeight: 36, fontWeight: 600, color: '#0F172A' }}
+          >
+            Làm mới cache
+          </Button>
+        </Popconfirm>
+      }
+    >
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} md={6}>
+          <CacheMetricBox
+            label="Tỉ lệ Cache Hit"
+            value={`${hitRate}%`}
+            sub={`${hits} hit · ${misses} miss`}
+            testId="redis-hit-rate"
+          />
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <CacheMetricBox
+            label="Độ trễ Ping"
+            value={latencyText}
+            sub={isRealRedis ? 'Kết nối ioredis' : 'Fallback tại Node'}
+            testId="redis-latency"
+          />
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <CacheMetricBox
+            label="Số Key Đang Lưu"
+            value={keysText}
+            sub="Phiên, Auth & Thống kê"
+            testId="redis-keys-count"
+          />
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <CacheMetricBox
+            label="Bộ nhớ sử dụng"
+            value={memoryText}
+            sub={`Lỗi kết nối: ${Number(metrics.errors) || 0}`}
+            testId="redis-memory-used"
+          />
+        </Col>
+      </Row>
+    </Card>
+  );
+};
+
+RedisCachePanel.propTypes = {
+  cacheData: PropTypes.shape({
+    redis: PropTypes.object,
+    metrics: PropTypes.object,
+  }),
+  flushing: PropTypes.bool,
+  onFlush: PropTypes.func.isRequired,
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+  const [cacheData, setCacheData] = useState(null);
+  const [flushing, setFlushing] = useState(false);
 
   const fetchStats = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const res = await axiosInstance.get('/admin/stats');
-      setData(res);
+      const [statsResult, cacheResult] = await Promise.allSettled([
+        axiosInstance.get('/admin/stats'),
+        axiosInstance.get('/admin/cache/status'),
+      ]);
+
+      if (statsResult.status === 'fulfilled') {
+        setData(statsResult.value);
+      } else {
+        throw statsResult.reason;
+      }
+
+      if (cacheResult.status === 'fulfilled' && cacheResult.value && typeof cacheResult.value === 'object' && !Array.isArray(cacheResult.value)) {
+        setCacheData(cacheResult.value);
+      }
     } catch (err) {
       console.error(err);
       if (!isSilent) message.error('Lỗi khi tải dữ liệu thống kê quản trị!');
@@ -94,6 +269,21 @@ const Dashboard = () => {
       if (!isSilent) setLoading(false);
     }
   }, []);
+
+  const handleFlushCache = useCallback(async () => {
+    setFlushing(true);
+    try {
+      const res = await axiosInstance.post('/admin/cache/flush', { scope: 'all' });
+      const cleared = res?.clearedKeys ?? 0;
+      message.success(`Đã xóa ${cleared} key bộ nhớ đệm thành công!`);
+      await fetchStats(true);
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err?.message || 'Không thể xóa bộ nhớ đệm Redis!';
+      message.error(errMsg);
+    } finally {
+      setFlushing(false);
+    }
+  }, [fetchStats]);
 
   useEffect(() => {
     fetchStats();
@@ -205,6 +395,12 @@ const Dashboard = () => {
           </Card>
         </Col>
       </Row>
+
+      <RedisCachePanel
+        cacheData={cacheData}
+        flushing={flushing}
+        onFlush={handleFlushCache}
+      />
     </div>
   );
 };

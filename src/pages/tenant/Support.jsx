@@ -140,6 +140,7 @@ const TenantSupport = () => {
               layout="vertical"
               onFinish={onFinish}
               requiredMark={false}
+              scrollToFirstError
               initialValues={{ severity: 'medium', category: 'other' }}
             >
               {activeRooms.length > 1 && (
@@ -196,7 +197,7 @@ const TenantSupport = () => {
               </Form.Item>
 
               <Form.Item style={{ marginBottom: 0 }}>
-                <Button type="primary" htmlType="submit" size="large" loading={submitLoading} block className="btn-dark">
+                <Button type="primary" htmlType="submit" size="large" loading={submitLoading} block>
                   Gửi yêu cầu hỗ trợ
                 </Button>
               </Form.Item>

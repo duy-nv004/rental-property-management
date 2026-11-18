@@ -7,6 +7,7 @@ import PageHeader from '../../components/admin/PageHeader';
 import { CATEGORY_LABELS } from '../tenant/Support';
 import SupportImage from '../../components/common/SupportImage';
 import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
+import { vndFormatter, vndParser } from '../../utils/formRules';
 
 const SEVERITY_TAGS = {
   high: { color: 'error', text: 'Nghiêm trọng' },
@@ -346,6 +347,9 @@ const SupportManager = () => {
         okText="Xác nhận"
         cancelText="Hủy"
         confirmLoading={actionId === resolving?.id}
+        width={480}
+        centered
+        destroyOnHidden
         onCancel={() => setResolving(null)}
         onOk={() => resolveForm.validateFields().then(async ({ landlordNote, repairCost, chargeToTenant }) => {
           await handleUpdateStatus(resolving.id, 'resolved', {
@@ -357,7 +361,7 @@ const SupportManager = () => {
         })}
         forceRender
       >
-        <Form form={resolveForm} layout="vertical" name="resolveSupport" initialValues={{ chargeToTenant: false }}>
+        <Form form={resolveForm} layout="vertical" name="resolveSupport" requiredMark={false} initialValues={{ chargeToTenant: false }}>
           <Form.Item name="landlordNote" label="Ghi chú xử lý">
             <Input.TextArea rows={3} maxLength={1000} placeholder="Ví dụ: Đã thay vòi nước mới" />
           </Form.Item>
@@ -367,8 +371,8 @@ const SupportManager = () => {
               step={1000}
               precision={0}
               style={{ width: '100%' }}
-              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-              parser={(v) => v.replace(/\./g, '')}
+              formatter={vndFormatter}
+              parser={vndParser}
               placeholder="0"
             />
           </Form.Item>

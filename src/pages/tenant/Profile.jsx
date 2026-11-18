@@ -5,6 +5,7 @@ import PageHeader from '../../components/admin/PageHeader';
 import '../../styles/tenant.css';
 import axiosInstance from '../../utils/axios';
 import { CccdUploadFields, occupantFormData } from '../landlord/ContractManager';
+import { VN_PHONE_RULE, CCCD_RULE, DOB_RULE } from '../../utils/formRules';
 
 const TenantProfile = () => {
   const [loading, setLoading] = useState(true);
@@ -272,7 +273,7 @@ const TenantProfile = () => {
               </Form.Item>
 
               <Form.Item style={{ marginBottom: 0 }}>
-                <Button type="primary" htmlType="submit" size="large" loading={changePasswordLoading} className="btn-dark">
+                <Button type="primary" htmlType="submit" size="large" loading={changePasswordLoading}>
                   Cập nhật mật khẩu
                 </Button>
               </Form.Item>
@@ -335,11 +336,11 @@ const TenantProfile = () => {
         destroyOnHidden
       >
         <Form form={occupantForm} name="tenantOccupantForm" layout="vertical" onFinish={handleAddOccupant} requiredMark={false}>
-          <Form.Item name="fullName" label="Họ tên" rules={[{ required: true, message: 'Nhập họ tên!' }]}><Input /></Form.Item>
-          <Form.Item name="cccd" label="CCCD"><Input /></Form.Item>
-          <Form.Item name="dob" label="Ngày sinh"><Input placeholder="dd/mm/yyyy" /></Form.Item>
-          <Form.Item name="phone" label="Số điện thoại"><Input inputMode="numeric" /></Form.Item>
-          <Form.Item name="relation" label="Quan hệ với khách chính"><Input /></Form.Item>
+          <Form.Item name="fullName" label="Họ tên" rules={[{ required: true, message: 'Nhập họ tên!' }]}><Input placeholder="Nguyễn Văn A" /></Form.Item>
+          <Form.Item name="cccd" label="CCCD" rules={[CCCD_RULE]}><Input placeholder="12 chữ số" inputMode="numeric" maxLength={12} /></Form.Item>
+          <Form.Item name="dob" label="Ngày sinh" rules={[DOB_RULE]}><Input placeholder="DD/MM/YYYY" /></Form.Item>
+          <Form.Item name="phone" label="Số điện thoại" rules={[VN_PHONE_RULE]}><Input placeholder="0912345678" inputMode="numeric" /></Form.Item>
+          <Form.Item name="relation" label="Quan hệ với khách chính"><Input placeholder="Ví dụ: Vợ/chồng, bạn cùng phòng..." /></Form.Item>
           <CccdUploadFields />
         </Form>
       </Modal>

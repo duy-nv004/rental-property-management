@@ -4,6 +4,7 @@ import { UserPlus, Trash2, Users, Edit2, Search } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
+import { VN_PHONE_RULE } from '../../utils/formRules';
 
 const TenantManager = () => {
   const [loading, setLoading] = useState(true);
@@ -341,7 +342,7 @@ const TenantManager = () => {
             label="Số điện thoại"
             rules={[
               { required: true, message: 'Vui lòng nhập số điện thoại!' },
-              { pattern: /^[0-9]{10}$/, message: 'Số điện thoại không hợp lệ (yêu cầu 10 chữ số)!' }
+              VN_PHONE_RULE,
             ]}
           >
             <Input placeholder="Ví dụ: 0987654321" inputMode="numeric" autoComplete="tel" />
@@ -384,7 +385,7 @@ const TenantManager = () => {
             label="Số điện thoại"
             rules={[
               { required: true, message: 'Vui lòng nhập số điện thoại!' },
-              { pattern: /^[0-9]{10}$/, message: 'Số điện thoại không hợp lệ (yêu cầu 10 chữ số)!' }
+              VN_PHONE_RULE,
             ]}
           >
             <Input placeholder="Ví dụ: 0987654321" inputMode="numeric" autoComplete="tel" />

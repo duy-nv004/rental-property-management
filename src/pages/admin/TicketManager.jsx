@@ -282,19 +282,23 @@ const TicketManager = () => {
         okText="Từ chối"
         cancelText="Hủy"
         okButtonProps={{ danger: true, disabled: trimmedReason.length < 5, loading: actionLoading === rejectTarget }}
+        centered
         destroyOnHidden
       >
         <p style={{ color: '#475569', marginTop: 0 }}>
           Tài khoản chủ nhà vẫn giữ nguyên trạng thái BỊ KHÓA. Lý do sẽ được gửi qua email cho chủ nhà.
         </p>
+        <label htmlFor="ticket-reject-reason" style={{ display: 'block', fontWeight: 600, fontSize: 13, color: '#0F172A', marginBottom: 6 }}>
+          Lý do từ chối <span style={{ color: '#DC2626' }}>*</span>
+        </label>
         <Input.TextArea
+          id="ticket-reject-reason"
           rows={4}
           maxLength={1000}
           showCount
           placeholder="Nhập lý do từ chối (tối thiểu 5 ký tự)"
           value={rejectReason}
           onChange={(e) => setRejectReason(e.target.value)}
-          aria-label="Lý do từ chối"
         />
       </Modal>
     </div>

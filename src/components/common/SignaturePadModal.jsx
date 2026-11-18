@@ -31,20 +31,23 @@ const SignaturePadModal = ({ open, onCancel, onConfirm, title = "Vẽ chữ ký 
     }
   }, [open]);
 
+  const getCanvasPoint = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width ? canvas.width / rect.width : 1;
+    const scaleY = rect.height ? canvas.height / rect.height : 1;
+    const clientX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  };
+
   const startDrawing = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    
-    let x, y;
-    if (e.touches && e.touches[0]) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
+    const { x, y } = getCanvasPoint(e, canvas);
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -61,16 +64,7 @@ const SignaturePadModal = ({ open, onCancel, onConfirm, title = "Vẽ chữ ký 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-
-    let x, y;
-    if (e.touches && e.touches[0]) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
+    const { x, y } = getCanvasPoint(e, canvas);
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -113,7 +107,7 @@ const SignaturePadModal = ({ open, onCancel, onConfirm, title = "Vẽ chữ ký 
     <Modal
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a', fontWeight: '800' }}>
-          <FileSignature size={20} color="#2563eb" />
+          <FileSignature size={20} color="#0F766E" aria-hidden="true" />
           <span>{title}</span>
         </div>
       }
@@ -133,14 +127,14 @@ const SignaturePadModal = ({ open, onCancel, onConfirm, title = "Vẽ chữ ký 
           loading={loading}
           disabled={loading || !hasDrawn || !agreed}
           onClick={handleSave} 
-          style={{ background: '#2563eb', border: 'none', borderRadius: '8px', fontWeight: '700' }}
+          style={{ borderRadius: '8px', fontWeight: '700' }}
         >
           Xác nhận chữ ký
         </Button>
       ]}
       width={520}
       centered
-      destroyOnClose
+      destroyOnHidden
     >
       <div style={{ padding: '8px 0' }}>
         <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
@@ -148,7 +142,7 @@ const SignaturePadModal = ({ open, onCancel, onConfirm, title = "Vẽ chữ ký 
         </p>
 
         <div style={{ 
-          border: isDrawing ? '2px solid #2563eb' : hasDrawn ? '2px solid #10b981' : '2px dashed #94a3b8', 
+          border: isDrawing ? '2px solid #0F766E' : hasDrawn ? '2px solid #10b981' : '2px dashed #94a3b8', 
           borderRadius: '12px', 
           background: hasDrawn ? '#f0fdf4' : '#f8fafc', 
           display: 'flex', 

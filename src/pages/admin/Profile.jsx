@@ -30,7 +30,7 @@ const AdminProfile = () => {
     <div>
       <PageHeader title="Hồ sơ quản trị viên" description="Đổi mật khẩu đăng nhập của tài khoản quản trị." />
       <Card style={{ maxWidth: 520 }} title={<span className="card-title"><Lock size={18} color="#0F766E" aria-hidden="true" /> Đổi mật khẩu</span>}>
-        <Form form={form} layout="vertical" onFinish={handleChangePassword}>
+        <Form form={form} layout="vertical" onFinish={handleChangePassword} requiredMark={false}>
           <Form.Item name="oldPassword" label="Mật khẩu hiện tại" rules={[{ required: true, message: 'Vui lòng nhập mật khẩu hiện tại' }]}>
             <Input.Password autoComplete="current-password" />
           </Form.Item>
@@ -48,7 +48,7 @@ const AdminProfile = () => {
           ]}>
             <Input.Password autoComplete="new-password" />
           </Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading} className="btn-dark">Đổi mật khẩu</Button>
+          <Button type="primary" htmlType="submit" loading={loading}>Đổi mật khẩu</Button>
         </Form>
       </Card>
     </div>

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Table, Tag, Button, Space, Select, Segmented, Modal, Form, Radio, InputNumber, Input, Popconfirm, Drawer, Descriptions, message, Tooltip } from 'antd';
-import { Eye, Check, RotateCcw, Trash2 } from 'lucide-react';
+import { Card, Table, Tag, Button, Space, Segmented, Modal, Form, Radio, InputNumber, Popconfirm, Drawer, Descriptions, message, Tooltip } from 'antd';
+import { Eye, Check, RotateCcw, Trash2, FileSpreadsheet, Printer } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
+import { vndFormatter, vndParser } from '../../utils/formRules';
+import { buildInvoicesCsv, buildPrintableInvoiceHtml, downloadCsvFile, openPrintDocument } from '../../utils/exportReport';
 
 const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
 const formatDate = (d) => (d ? new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—');
@@ -54,8 +56,8 @@ const InvoiceManager = () => {
 
   useEffect(() => {
     fetchInvoices();
-    // Tự động kiểm tra hóa đơn & thanh toán mới mỗi 12 giây hoặc khi chuyển tab
-    const timer = setInterval(() => fetchInvoices(true), 12000);
+    // Đồng bộ chính qua SSE app:data-changed; fallback nền mỗi 60 giây
+    const timer = setInterval(() => fetchInvoices(true), 60000);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') fetchInvoices(true);
     };
@@ -199,6 +201,18 @@ const InvoiceManager = () => {
       <PageHeader
         title="Hóa đơn"
         description="Theo dõi công nợ từng phòng và xác nhận khi đã thu tiền."
+        extra={
+          <Button
+            icon={<FileSpreadsheet size={15} aria-hidden="true" />}
+            disabled={!filteredInvoices.length}
+            onClick={() => {
+              const csv = buildInvoicesCsv(filteredInvoices);
+              downloadCsvFile(csv, `danh-sach-hoa-don-${todayStr()}.csv`);
+            }}
+          >
+            Xuất Excel
+          </Button>
+        }
       />
 
       {/* Thanh bộ lọc đáp ứng chuẩn UI/UX Pro Max */}
@@ -268,6 +282,9 @@ const InvoiceManager = () => {
         okText="Xác nhận"
         cancelText="Hủy"
         confirmLoading={submitting}
+        width={460}
+        centered
+        destroyOnHidden
         onCancel={() => setPaying(null)}
         onOk={() => payForm.validateFields().then((v) => {
           const total = Number(paying?.totalAmount || 0);
@@ -275,8 +292,8 @@ const InvoiceManager = () => {
           return updatePayment(paying, { isPaid: isFull, allowPartial: !isFull, ...v });
         })}
       >
-        <Form form={payForm} layout="vertical">
-          <Form.Item name="paymentMethod" label="Cách thu">
+        <Form form={payForm} layout="vertical" requiredMark={false} initialValues={{ paymentMethod: 'cash' }}>
+          <Form.Item name="paymentMethod" label="Cách thu" rules={[{ required: true, message: 'Vui lòng chọn cách thu!' }]}>
             <Radio.Group>
               <Radio value="cash">Tiền mặt</Radio>
               <Radio value="bank_transfer">Chuyển khoản</Radio>
@@ -284,7 +301,7 @@ const InvoiceManager = () => {
           </Form.Item>
           <Form.Item name="paidAmount" label="Số tiền đã thu (VND)" rules={[{ required: true, message: 'Vui lòng nhập số tiền!' }]}>
             <InputNumber min={0} step={1000} precision={0} style={{ width: '100%' }}
-              formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')} parser={(v) => v.replace(/\./g, '')} />
+              formatter={vndFormatter} parser={vndParser} />
           </Form.Item>
         </Form>
       </Modal>
@@ -295,11 +312,22 @@ const InvoiceManager = () => {
         onClose={() => setViewing(null)}
         width={420}
         extra={
-          viewing?.qrCodeUrl && (
-            <Button size="small" type="primary" onClick={() => setQrPreview(viewing)}>
-              Xem lại QR
-            </Button>
-          )
+          <Space size="small">
+            {viewing && (
+              <Button
+                size="small"
+                icon={<Printer size={14} aria-hidden="true" />}
+                onClick={() => openPrintDocument(buildPrintableInvoiceHtml(viewing))}
+              >
+                In / Xuất PDF
+              </Button>
+            )}
+            {viewing?.qrCodeUrl && (
+              <Button size="small" type="primary" onClick={() => setQrPreview(viewing)}>
+                Xem lại QR
+              </Button>
+            )}
+          </Space>
         }
       >
         {viewing && (

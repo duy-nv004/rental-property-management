@@ -1,56 +1,27 @@
 /* eslint-disable react-refresh/only-export-components */
-import { Table, Tag, Card, Button, Space, Modal, Form, Select, DatePicker, InputNumber, message, Popconfirm, Spin, Row, Col, Checkbox, Upload, Input, Alert, Descriptions, Drawer, Badge, Grid, Tooltip } from 'antd';
+import { Table, Tag, Card, Button, Space, Modal, Form, Select, DatePicker, InputNumber, message, Popconfirm, Spin, Row, Col, Checkbox, Input, Alert, Descriptions, Badge, Grid, Tooltip } from 'antd';
 import dayjs from 'dayjs';
-import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus, RotateCcw, Trash2, Users } from 'lucide-react';
+import { FileSignature, Plus, Eye, UploadCloud, Printer, UserPlus, RotateCcw, Trash2, Users, CalendarCheck } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import PageHeader from '../../components/admin/PageHeader';
 import axiosInstance from '../../utils/axios';
-import { contractFilterKeys, filterContracts, compareEndDate, parseInventory, buildTerminationPayload, canConfirmTermination } from '../../utils/contracts';
+import { filterContracts, parseInventory, buildTerminationPayload, canConfirmTermination } from '../../utils/contracts';
+import { buildPrintableContractHtml, openPrintDocument } from '../../utils/exportReport';
 
 import { useState, useEffect, useCallback } from 'react';
 import SignaturePadModal from '../../components/common/SignaturePadModal';
 import ResponsiveFilterBar from '../../components/common/ResponsiveFilterBar';
+import { VN_PHONE_RULE, CCCD_RULE, DOB_RULE } from '../../utils/formRules';
+import ContractRequestsDrawer from '../../components/landlord/contracts/ContractRequestsDrawer';
+import BookingsDrawer from '../../components/landlord/contracts/BookingsDrawer';
+import OccupantsModal from '../../components/landlord/contracts/OccupantsModal';
+import {
+  CccdUploadFields,
+  occupantFormData,
+  expiryTag,
+} from '../../components/landlord/contracts/contractHelpers';
 
-// 2 ô ảnh CCCD bắt buộc (minh chứng tạm trú), dùng chung cho form thêm người ở của chủ nhà và khách
-export const CccdUploadFields = () => (
-  <Row gutter={12}>
-    {[['cccdFront', 'Mặt trước'], ['cccdBack', 'Mặt sau']].map(([name, label]) => (
-      <Col xs={12} key={name}>
-        <Form.Item
-          name={name} label={`CCCD ${label.toLowerCase()}`} valuePropName="fileList"
-          getValueFromEvent={(e) => e?.fileList}
-          rules={[{ required: true, message: `Tải ảnh CCCD ${label.toLowerCase()}!` }]}
-        >
-          <Upload listType="picture-card" maxCount={1} accept="image/jpeg,image/png,image/webp" beforeUpload={() => false}>
-            {label}
-          </Upload>
-        </Form.Item>
-      </Col>
-    ))}
-  </Row>
-);
-
-// Đóng gói form người ở thành multipart: các field chữ + 2 ảnh CCCD
-export const occupantFormData = ({ cccdFront, cccdBack, ...fields }) => {
-  const fd = new FormData();
-  Object.entries(fields).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== '') fd.append(k, v);
-  });
-  fd.append('cccdFront', cccdFront[0].originFileObj);
-  fd.append('cccdBack', cccdBack[0].originFileObj);
-  return fd;
-};
-
-// Tag phụ cho HĐ active theo endDate (C3): đã quá hạn hoặc còn <= 7 ngày
-export const expiryTag = (endDate) => {
-  if (!endDate) return null;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const end = new Date(endDate); end.setHours(0, 0, 0, 0);
-  const days = Math.round((end - today) / 86400000);
-  if (days < 0) return { color: 'red', text: 'Quá hạn' };
-  if (days <= 7) return { color: 'orange', text: 'Sắp hết hạn' };
-  return null;
-};
+export { CccdUploadFields, occupantFormData, expiryTag };
 
 const ContractManager = () => {
   const location = useLocation();
@@ -58,8 +29,13 @@ const ContractManager = () => {
   const [loading, setLoading] = useState(true);
   const [contracts, setContracts] = useState([]);
   const [rooms, setRooms] = useState([]);
+  const [allRooms, setAllRooms] = useState([]);
   const [buildings, setBuildings] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [bookingsOpen, setBookingsOpen] = useState(false);
+  const [activeBooking, setActiveBooking] = useState(null);
+  const [bookingActionId, setBookingActionId] = useState(null);
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
   // Bộ lọc danh sách HĐ (tách khỏi selectedBuildingId của form lập HĐ)
   const [search, setSearch] = useState('');
@@ -106,8 +82,10 @@ const ContractManager = () => {
         axiosInstance.get('/manage/tenants'),
         axiosInstance.get('/manage/buildings')
       ]);
+      const normalizedRooms = Array.isArray(roomsData) ? roomsData : [];
       setContracts(contractsData);
-      setRooms(roomsData.filter(r => r.status === 'empty')); // Chỉ lấy phòng trống để làm hợp đồng mới
+      setAllRooms(normalizedRooms);
+      setRooms(normalizedRooms.filter(r => r.status === 'empty')); // Chỉ lấy phòng trống để làm hợp đồng mới
       setTenants(tenantsData);
       setBuildings(buildingsData);
     } catch (err) {
@@ -118,18 +96,30 @@ const ContractManager = () => {
     }
   }, []);
 
+  const fetchBookings = async () => {
+    try {
+      const data = await axiosInstance.get('/manage/bookings');
+      setBookings(Array.isArray(data) ? data : []);
+    } catch {
+      setBookings([]);
+    }
+  };
+
   useEffect(() => {
     fetchData();
     fetchRequests();
-    // Tự động kiểm tra hợp đồng và yêu cầu mới ngầm mỗi 20 giây hoặc khi chuyển tab (chạy ngầm, không nhấp nháy UI)
+    fetchBookings();
+    // Đồng bộ chính qua SSE app:data-changed; fallback nền mỗi 60 giây (chạy ngầm, không nhấp nháy UI)
     const timer = setInterval(() => {
       fetchData(true);
       fetchRequests();
-    }, 20000);
+      fetchBookings();
+    }, 60000);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchData(true);
         fetchRequests();
+        fetchBookings();
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -143,10 +133,23 @@ const ContractManager = () => {
 
   // Chatbot vừa thay đổi dữ liệu (ChatWidget phát 'app:data-changed') thì tải lại
   useEffect(() => {
-    const onChanged = () => { fetchData(true); fetchRequests(); };
+    const onChanged = () => { fetchData(true); fetchRequests(); fetchBookings(); };
     window.addEventListener('app:data-changed', onChanged);
     return () => window.removeEventListener('app:data-changed', onChanged);
   }, [fetchData]);
+
+  const handleUpdateBookingStatus = async (bookingId, status, note) => {
+    setBookingActionId(bookingId);
+    try {
+      const res = await axiosInstance.put(`/manage/bookings/${bookingId}/status`, { status, note });
+      message.success(res?.message || 'Đã cập nhật trạng thái lịch hẹn / đặt cọc.');
+      await Promise.all([fetchBookings(), fetchData(true)]);
+    } catch (err) {
+      message.error(err.response?.data?.message || 'Không thể cập nhật trạng thái booking.');
+    } finally {
+      setBookingActionId(null);
+    }
+  };
 
   // ─── YÊU CẦU TỪ KHÁCH (C5) ─────────────────────────────────────────────────
   // Tải riêng để lỗi API yêu cầu không làm hỏng danh sách hợp đồng
@@ -252,21 +255,27 @@ const ContractManager = () => {
     message.info('Đã nạp thông tin mặc định của Chủ nhà từ Hồ sơ tài khoản.');
   };
 
-  // Mở Modal Tạo hợp đồng mới
-  const handleOpenCreateModal = (buildingId = null, roomId = null) => {
+  // Mở Modal Tạo hợp đồng mới (hỗ trợ pre-fill từ RoomBooking)
+  const handleOpenCreateModal = (buildingId = null, roomId = null, booking = null) => {
     setHasCustomPrices(false);
     form.resetFields();
-    
+    setActiveBooking(booking || null);
+
     const landlordInfo = JSON.parse(localStorage.getItem('user')) || {};
     const initialBuildingId = buildingId || (buildings.length > 0 ? buildings[0].id : undefined);
     const chosenBuilding = buildings.find(b => b.id === initialBuildingId);
     const landlordAddress = chosenBuilding ? (chosenBuilding.address || chosenBuilding.name) : '';
+    const roomLookup = allRooms.find(r => r.id === roomId) || rooms.find(r => r.id === roomId) || booking?.room;
 
     setSelectedBuildingId(initialBuildingId);
     form.setFieldsValue({
       buildingId: initialBuildingId,
       roomId: roomId,
-      rentPrice: rooms.find(r => r.id === roomId)?.price,
+      rentPrice: roomLookup?.price !== undefined ? Number(roomLookup.price) : undefined,
+      deposit: booking ? (Number(booking.depositAmount) || Number(roomLookup?.price) || undefined) : undefined,
+      tenantId: booking?.tenantId || undefined,
+      tenantName: booking?.tenant?.name || booking?.guestName || undefined,
+      tenantPhone: booking?.tenant?.phone || booking?.guestPhone || undefined,
       ...landlordFields(landlordInfo),
       landlordAddress: landlordAddress,
       electricityPrice: chosenBuilding?.service ? parseFloat(chosenBuilding.service.electricityPrice) : 3500,
@@ -291,6 +300,30 @@ const ContractManager = () => {
     setModalVisible(true);
     // Điền lại Bên A bằng hồ sơ mới nhất từ server (đủ CCCD, ngày sinh, HKTT)
     loadLandlordInfo().then((info) => form.setFieldsValue(landlordFields(info)));
+  };
+
+  const handleCreateContractFromBooking = (booking) => {
+    if (!booking) return;
+    if (booking.tenantId) {
+      setTenants((prev) => {
+        if (prev.some((t) => t.id === booking.tenantId)) return prev;
+        return [
+          ...prev,
+          {
+            id: booking.tenantId,
+            name: booking.tenant?.name || booking.guestName,
+            phone: booking.tenant?.phone || booking.guestPhone,
+            email: booking.tenant?.email || booking.guestEmail || null,
+          },
+        ];
+      });
+    }
+    if (booking.room) {
+      setAllRooms((prev) => (prev.some((r) => r.id === booking.roomId) ? prev : [...prev, booking.room]));
+    }
+    const targetBuildingId = booking.buildingId || booking.room?.buildingId || booking.building?.id;
+    setBookingsOpen(false);
+    handleOpenCreateModal(targetBuildingId, booking.roomId, booking);
   };
 
   // Quét 1 hoặc 2 mặt CCCD bằng AI
@@ -429,6 +462,7 @@ const ContractManager = () => {
         paymentDay: values.paymentDay || 30,
         firstLastMonthPolicy: values.firstLastMonthPolicy || 'full',
         inventory: JSON.stringify(inventoryList),
+        bookingId: activeBooking?.id || undefined,
 
         ...finalPrices
       };
@@ -445,9 +479,11 @@ const ContractManager = () => {
       });
       message.success('Khởi tạo hợp đồng thuê thành công! Hợp đồng đang chờ khách thuê đăng nhập ký xác nhận.');
       form.resetFields();
+      setActiveBooking(null);
       setLandlordSignature(null);
       setModalVisible(false);
       fetchData();
+      fetchBookings();
     } catch (err) {
       console.error('Error creating contract:', err);
       const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi tạo hợp đồng.';
@@ -542,21 +578,28 @@ const ContractManager = () => {
     }
   };
 
-  // Xem ảnh CCCD (không public): tải blob qua API có token rồi hiện bằng object URL
+  // Xem ảnh CCCD (không public): ưu tiên Signed URL nếu server trả về, fallback tải blob qua API có token
   const [cccdPreview, setCccdPreview] = useState(null);
-  const handleViewCccd = async (contractId, title, files) => {
+  const handleViewCccd = async (contractId, title, files, signedUrls = []) => {
+    const validUrls = (signedUrls || []).filter(Boolean);
+    if (validUrls.length > 0) {
+      setCccdPreview({ title, urls: validUrls, isObjectUrl: false });
+      return;
+    }
     const names = files.filter(Boolean);
     if (!names.length) return message.info('Chưa có ảnh CCCD.');
     try {
       const blobs = await Promise.all(names.map((f) =>
         axiosInstance.get(`/contracts/${contractId}/cccd-images/${encodeURIComponent(f)}`, { responseType: 'blob' })));
-      setCccdPreview({ title, urls: blobs.map((b) => URL.createObjectURL(b)) });
+      setCccdPreview({ title, urls: blobs.map((b) => URL.createObjectURL(b)), isObjectUrl: true });
     } catch {
       message.error('Không tải được ảnh CCCD.');
     }
   };
   const closeCccdPreview = () => {
-    cccdPreview?.urls.forEach((u) => URL.revokeObjectURL(u));
+    if (cccdPreview?.isObjectUrl) {
+      cccdPreview?.urls.forEach((u) => URL.revokeObjectURL(u));
+    }
     setCccdPreview(null);
   };
 
@@ -754,9 +797,19 @@ const ContractManager = () => {
               type="default" 
               icon={<Eye size={14} />} 
               size="small" 
-              onClick={() => {
+              onClick={async () => {
                 setSelectedContract(record);
                 setDetailModalVisible(true);
+                if (record?.id && (record.landlordSignature === undefined || record.tenantSignature === undefined)) {
+                  try {
+                    const detail = await axiosInstance.get(`/contracts/${record.id}`);
+                    if (detail && !Array.isArray(detail) && Number(detail.id) === Number(record.id)) {
+                      setSelectedContract((prev) => (prev && Number(prev.id) === Number(record.id) ? { ...prev, ...detail } : prev));
+                    }
+                  } catch {
+                    // Giữ nguyên record hiện có nếu API lỗi hoặc offline
+                  }
+                }
               }}
               aria-label="Xem HĐ"
             />
@@ -822,6 +875,18 @@ const ContractManager = () => {
 
   const numFormatter = (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   const numParser = (value) => value.replace(/\$\s?|(,*)/g, '');
+  const pendingBookingsCount = bookings.filter(
+    (b) => b.status === 'pending' || b.paymentStatus === 'reported'
+  ).length;
+  const convertibleBookingsCount = bookings.filter(
+    (b) => b.status === 'deposit_paid' || b.status === 'confirmed'
+  ).length;
+  const selectableRooms = [
+    ...rooms,
+    ...(activeBooking
+      ? allRooms.filter((r) => r.id === activeBooking.roomId && !rooms.some((er) => er.id === r.id))
+      : []),
+  ];
 
   return (
     <div className="page-shell">
@@ -830,6 +895,18 @@ const ContractManager = () => {
         description="Lập hợp đồng thuê, theo dõi trạng thái ký và thanh lý hợp đồng."
         extra={
           <Space wrap>
+            <Badge count={pendingBookingsCount}>
+              <Button
+                size="large"
+                icon={<CalendarCheck size={16} aria-hidden="true" />}
+                onClick={() => {
+                  fetchBookings();
+                  setBookingsOpen(true);
+                }}
+              >
+                Lịch xem phòng &amp; Đặt cọc
+              </Button>
+            </Badge>
             <Badge count={pendingRequests}>
               <Button size="large" onClick={() => setRequestsOpen(true)}>Yêu cầu từ khách</Button>
             </Badge>
@@ -838,7 +915,7 @@ const ContractManager = () => {
               size="large"
               icon={<Plus size={16} aria-hidden="true" />}
               onClick={() => handleOpenCreateModal()}
-              disabled={tenants.length === 0 || rooms.length === 0}
+              disabled={tenants.length === 0 || (rooms.length === 0 && convertibleBookingsCount === 0)}
             >
               Lập hợp đồng mới
             </Button>
@@ -934,6 +1011,7 @@ const ContractManager = () => {
           layout="vertical"
           onFinish={handleCreateContract}
           requiredMark={false}
+          scrollToFirstError
           className="modal-form"
           initialValues={{
             electricityPrice: 3500,
@@ -996,12 +1074,14 @@ const ContractManager = () => {
                   <Select
                     placeholder="Chọn phòng trống"
                     disabled={!selectedBuildingId}
-                    onChange={(val) => form.setFieldsValue({ rentPrice: Number(rooms.find(r => r.id === val)?.price) || undefined })}
+                    onChange={(val) => form.setFieldsValue({ rentPrice: Number(selectableRooms.find(r => r.id === val)?.price) || undefined })}
                   >
-                    {rooms
+                    {selectableRooms
                       .filter(r => r.buildingId === selectedBuildingId)
                       .map(r => (
-                        <Select.Option key={r.id} value={r.id}>Phòng {r.roomNumber} ({formatVND(r.price)}/tháng)</Select.Option>
+                        <Select.Option key={r.id} value={r.id}>
+                          Phòng {r.roomNumber} ({formatVND(r.price)}/tháng){r.status === 'reserved' ? ' - Đã đặt cọc giữ phòng' : ''}
+                        </Select.Option>
                       ))}
                   </Select>
                 </Form.Item>
@@ -1050,18 +1130,18 @@ const ContractManager = () => {
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={12}>
-                  <Form.Item name="landlordPhone" label="Điện thoại Bên A:" rules={[{ required: true, message: 'Nhập SĐT chủ nhà!' }]}>
-                    <Input placeholder="SĐT liên hệ..." />
+                  <Form.Item name="landlordPhone" label="Điện thoại Bên A:" rules={[{ required: true, message: 'Nhập SĐT chủ nhà!' }, VN_PHONE_RULE]}>
+                    <Input placeholder="SĐT liên hệ..." inputMode="numeric" />
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={8}>
-                  <Form.Item name="landlordCccd" label="Số CCCD:">
-                    <Input placeholder="Số CCCD chủ nhà..." />
+                  <Form.Item name="landlordCccd" label="Số CCCD:" rules={[CCCD_RULE]}>
+                    <Input placeholder="12 chữ số..." inputMode="numeric" maxLength={12} />
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={8}>
-                  <Form.Item name="landlordDob" label="Ngày sinh:">
-                    <Input placeholder="DD/MM/YYYY..." />
+                  <Form.Item name="landlordDob" label="Ngày sinh:" rules={[DOB_RULE]}>
+                    <Input placeholder="DD/MM/YYYY" />
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={8}>
@@ -1137,18 +1217,18 @@ const ContractManager = () => {
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={12}>
-                  <Form.Item name="tenantPhone" label="Điện thoại Bên B:" rules={[{ required: true, message: 'Nhập SĐT khách thuê!' }]}>
-                    <Input placeholder="Số điện thoại..." />
+                  <Form.Item name="tenantPhone" label="Điện thoại Bên B:" rules={[{ required: true, message: 'Nhập SĐT khách thuê!' }, VN_PHONE_RULE]}>
+                    <Input placeholder="Số điện thoại..." inputMode="numeric" />
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={12}>
-                  <Form.Item name="tenantCccd" label="Số CCCD Bên B:" rules={[{ required: true, message: 'Nhập CCCD!' }]}>
-                    <Input placeholder="12 chữ số" inputMode="numeric" style={{ fontVariantNumeric: 'tabular-nums' }} />
+                  <Form.Item name="tenantCccd" label="Số CCCD Bên B:" rules={[{ required: true, message: 'Nhập CCCD!' }, CCCD_RULE]}>
+                    <Input placeholder="12 chữ số" inputMode="numeric" maxLength={12} style={{ fontVariantNumeric: 'tabular-nums' }} />
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={12}>
-                  <Form.Item name="tenantDob" label="Ngày tháng năm sinh:" rules={[{ required: true, message: 'Nhập ngày sinh!' }]}>
-                    <Input placeholder="DD/MM/YYYY..." />
+                  <Form.Item name="tenantDob" label="Ngày tháng năm sinh:" rules={[{ required: true, message: 'Nhập ngày sinh!' }, DOB_RULE]}>
+                    <Input placeholder="DD/MM/YYYY" />
                   </Form.Item>
                 </Col>
                 <Col xs={24}>
@@ -1390,8 +1470,8 @@ const ContractManager = () => {
           <Button key="close" onClick={() => setDetailModalVisible(false)}>
             Đóng
           </Button>,
-          <Button key="print" type="primary" className="btn-success" icon={<Printer size={14} aria-hidden="true" />} onClick={() => window.print()}>
-            In hợp đồng
+          <Button key="print" type="primary" className="btn-success" icon={<Printer size={14} aria-hidden="true" />} onClick={() => openPrintDocument(buildPrintableContractHtml(selectedContract))}>
+            In / Xuất PDF
           </Button>
         ]}
       >
@@ -1524,12 +1604,13 @@ const ContractManager = () => {
           <Button key="cancel" onClick={() => setQuickTenantModalVisible(false)}>
             Hủy
           </Button>,
-          <Button key="submit" type="primary" className="btn-success" loading={quickTenantLoading} onClick={() => quickTenantForm.submit()}>
+          <Button key="submit" type="primary" loading={quickTenantLoading} onClick={() => quickTenantForm.submit()}>
             Tạo & Chọn khách này
           </Button>
         ]}
         width={420}
         centered
+        destroyOnHidden
       >
         <Form
           form={quickTenantForm}
@@ -1552,7 +1633,7 @@ const ContractManager = () => {
             label="Số điện thoại (tên đăng nhập)"
             rules={[
               { required: true, message: 'Vui lòng nhập số điện thoại!' },
-              { pattern: /^[0-9]{10}$/, message: 'Số điện thoại gồm 10 chữ số!' }
+              VN_PHONE_RULE
             ]}
           >
             <Input size="large" inputMode="tel" placeholder="Ví dụ: 0987654321" />
@@ -1579,6 +1660,7 @@ const ContractManager = () => {
         ]}
         width={450}
         centered
+        destroyOnHidden
       >
         {renewTarget && (
           <p className="cell-sub">
@@ -1610,40 +1692,26 @@ const ContractManager = () => {
       </Modal>
 
       {/* DRAWER YÊU CẦU TỪ KHÁCH (C5) */}
-      <Drawer title="Yêu cầu từ khách thuê" open={requestsOpen} onClose={() => setRequestsOpen(false)} width={screens.md ? 760 : '100%'}>
-        <Table
-          rowKey="id"
-          size="small"
-          dataSource={requests}
-          pagination={false}
-          scroll={{ x: 'max-content' }}
-          locale={{ emptyText: 'Chưa có yêu cầu nào' }}
-          columns={[
-            { title: 'Phòng', render: (_, r) => r.contract?.room?.roomNumber },
-            { title: 'Khách', render: (_, r) => r.tenant?.name },
-            { title: 'Loại', dataIndex: 'type', render: (t) => (t === 'move_out' ? 'Trả phòng' : 'Gia hạn') },
-            {
-              title: 'Ngày', render: (_, r) => (
-                <>
-                  {r.desiredDate ? new Date(r.desiredDate).toLocaleDateString('vi-VN') : ''}
-                  {r.shortNotice && r.status === 'pending' && <div><Tag color="orange">Báo trước dưới 30 ngày</Tag></div>}
-                </>
-              )
-            },
-            { title: 'Ghi chú', dataIndex: 'note' },
-            {
-              title: '', render: (_, r) => (r.status === 'pending' ? (
-                <Space>
-                  <Button size="small" type="primary" onClick={() => handleRespondRequest(r, 'approved')}>Duyệt</Button>
-                  <Button size="small" danger onClick={() => openRespond(r, 'rejected')}>Từ chối</Button>
-                </Space>
-              ) : (
-                <Tag color={r.status === 'approved' ? 'green' : 'red'}>{r.status === 'approved' ? 'Đã duyệt' : 'Đã từ chối'}</Tag>
-              ))
-            }
-          ]}
-        />
-      </Drawer>
+      <ContractRequestsDrawer
+        open={requestsOpen}
+        onClose={() => setRequestsOpen(false)}
+        width={screens.md ? 760 : '100%'}
+        requests={requests}
+        onRespondRequest={handleRespondRequest}
+        onOpenRejectModal={openRespond}
+      />
+
+      {/* DRAWER LỊCH XEM PHÒNG & ĐẶT CỌC */}
+      <BookingsDrawer
+        open={bookingsOpen}
+        onClose={() => setBookingsOpen(false)}
+        width={screens.md ? 760 : '100%'}
+        bookings={bookings}
+        bookingActionId={bookingActionId}
+        onUpdateBookingStatus={handleUpdateBookingStatus}
+        onCreateContractFromBooking={handleCreateContractFromBooking}
+        formatVND={formatVND}
+      />
 
       {/* MODAL PHẢN HỒI YÊU CẦU: hiện dùng cho từ chối (bắt buộc lý do); duyệt gọi thẳng để mở luồng thanh lý/gia hạn */}
       <Modal
@@ -1740,6 +1808,9 @@ const ContractManager = () => {
               {settlement.finalInvoiceEstimate !== null && settlement.finalInvoiceEstimate !== undefined && (
                 <Descriptions.Item label="Hóa đơn tháng cuối (ước tính)">{formatVND(settlement.finalInvoiceEstimate)}</Descriptions.Item>
               )}
+              {Number(settlement.pendingRepairFee) > 0 && (
+                <Descriptions.Item label="Phí sửa chữa chờ kết chuyển">{formatVND(settlement.pendingRepairFee)}</Descriptions.Item>
+              )}
               <Descriptions.Item label="Tiền hư hỏng">{formatVND(settlement.damageAmount)}</Descriptions.Item>
               <Descriptions.Item label="Tổng khấu trừ">{formatVND(settlement.deduct)}</Descriptions.Item>
               <Descriptions.Item label="Hoàn lại cho khách"><b>{formatVND(settlement.refund)}</b>{settlement.forfeit ? ' (mất cọc)' : ''}</Descriptions.Item>
@@ -1753,74 +1824,16 @@ const ContractManager = () => {
       </Modal>
 
       {/* MODAL NGƯỜI Ở CÙNG & TẠM TRÚ (C6) */}
-      <Modal
-        title={`Người ở cùng & tạm trú - HĐ #${occupantTarget?.id || ''}`}
-        open={!!occupantTarget}
+      <OccupantsModal
+        target={occupantTarget}
+        occupants={occupants}
+        form={occupantForm}
         onCancel={() => setOccupantTarget(null)}
-        footer={null}
-        width={820}
-        centered
-        destroyOnHidden
-      >
-        <Table
-          rowKey="id"
-          size="small"
-          dataSource={occupants}
-          pagination={false}
-          scroll={{ x: 'max-content' }}
-          locale={{ emptyText: 'Chưa có người ở nào' }}
-          columns={[
-            { title: 'Họ tên', render: (_, o) => <>{o.fullName}{o.isPrimary && <Tag style={{ marginLeft: 6 }}>Khách chính</Tag>}</> },
-            { title: 'CCCD', dataIndex: 'cccd', render: (v) => <span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{v}</span> },
-            {
-              title: 'Ảnh CCCD', render: (_, o) => (o.cccdFrontImage || o.cccdBackImage
-                ? <Button size="small" icon={<Eye size={14} aria-hidden="true" />}
-                    onClick={() => handleViewCccd(occupantTarget.id, `CCCD - ${o.fullName}`, [o.cccdFrontImage, o.cccdBackImage])}>Xem</Button>
-                : <Tag>Chưa có ảnh</Tag>)
-            },
-            { title: 'Quan hệ', dataIndex: 'relation' },
-            {
-              title: 'Tạm trú', render: (_, o) => (o.residenceStatus === 'registered'
-                ? <Tag color="green">Đã khai báo{o.registeredAt ? ` (${new Date(o.registeredAt).toLocaleDateString('vi-VN')})` : ''}</Tag>
-                : <Tag color="orange">Chưa khai báo</Tag>)
-            },
-            {
-              title: '', render: (_, o) => (
-                <Space>
-                  {o.residenceStatus === 'registered' ? (
-                    <Button size="small" onClick={() => handleUpdateOccupant(o.id, { residenceStatus: 'not_registered', registeredAt: null })}>Bỏ đánh dấu</Button>
-                  ) : (
-                    <Button size="small" type="primary" onClick={() => handleUpdateOccupant(o.id, { residenceStatus: 'registered', registeredAt: dayjs().format('YYYY-MM-DD') })}>
-                      Đánh dấu đã tạm trú
-                    </Button>
-                  )}
-                  {!o.isPrimary && (
-                    <Popconfirm title="Xóa người ở này?" okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }} onConfirm={() => handleRemoveOccupant(o.id)}>
-                      <Button size="small" danger aria-label={`Xóa ${o.fullName}`} icon={<Trash2 size={14} />} />
-                    </Popconfirm>
-                  )}
-                </Space>
-              )
-            }
-          ]}
-        />
-        <Form form={occupantForm} name="occupantForm" layout="vertical" onFinish={handleAddOccupant} requiredMark={false} className="modal-form" style={{ marginTop: 16 }}>
-          <Row gutter={12}>
-            <Col xs={24} sm={8}>
-              <Form.Item name="fullName" label="Họ tên" rules={[{ required: true, message: 'Nhập họ tên!' }]}><Input /></Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="cccd" label="CCCD"><Input /></Form.Item>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Form.Item name="relation" label="Quan hệ"><Input /></Form.Item>
-            </Col>
-          </Row>
-          <CccdUploadFields />
-          <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>Ảnh CCCD 2 mặt bắt buộc, dùng làm minh chứng khai báo tạm trú.</div>
-          <Button type="primary" htmlType="submit">Thêm người ở</Button>
-        </Form>
-      </Modal>
+        onAddOccupant={handleAddOccupant}
+        onUpdateOccupant={handleUpdateOccupant}
+        onRemoveOccupant={handleRemoveOccupant}
+        onViewCccd={handleViewCccd}
+      />
 
       {/* MODAL XEM ẢNH CCCD */}
       <Modal title={cccdPreview?.title} open={!!cccdPreview} onCancel={closeCccdPreview} footer={null} width={760} centered destroyOnHidden>

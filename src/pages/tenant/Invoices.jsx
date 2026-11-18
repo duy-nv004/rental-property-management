@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Modal, Empty, Spin, Tag, Divider, Alert, message, Select } from 'antd';
 import dayjs from 'dayjs';
-import { CreditCard, Eye, Download } from 'lucide-react';
+import { CreditCard, Eye, Download, Printer } from 'lucide-react';
 import '../../styles/tenant.css';
 import axiosInstance from '../../utils/axios';
+import { buildPrintableInvoiceHtml, openPrintDocument } from '../../utils/exportReport';
 
 const METHOD_LABEL = {
   cash: 'Tiền mặt',
@@ -237,6 +238,15 @@ const TenantInvoices = () => {
           <Button key="close" onClick={() => setSelectedInvoice(null)}>
             Đóng
           </Button>,
+          selectedInvoice && (
+            <Button
+              key="print"
+              icon={<Printer size={14} aria-hidden="true" />}
+              onClick={() => openPrintDocument(buildPrintableInvoiceHtml(selectedInvoice))}
+            >
+              In / Xuất PDF
+            </Button>
+          ),
           selectedInvoice && !selectedInvoice.isPaid && (
             <Button
               key="pay"

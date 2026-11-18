@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Button, Modal, Tag, Spin, Alert, Space, message, Segmented } from 'antd';
-import { Landmark, Crown, Clock, Calendar, CheckCircle2, Zap, Loader2, AlertTriangle, Sparkles, Building, DoorOpen, Cpu, XCircle } from 'lucide-react';
+import { Landmark, Crown, Clock, Calendar, CheckCircle2, Zap, Loader2, AlertTriangle, Sparkles, Building, DoorOpen, Cpu, XCircle, Bot } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
 
@@ -11,17 +11,17 @@ const PLAN_DETAILS = {
   free: {
     color: '#475569',
     title: 'Gói Miễn phí',
-    features: ['Quản lý tối đa 1 tòa nhà', 'Giới hạn 5 phòng mỗi tòa nhà', 'Nhập chỉ số điện nước thủ công', 'Không hỗ trợ AI đọc số'],
+    features: ['Quản lý tối đa 1 tòa nhà', 'Giới hạn 5 phòng mỗi tòa nhà', 'Nhập chỉ số điện nước thủ công', 'Trợ lý AI: 20 câu hỏi / tháng'],
   },
   basic: {
     color: '#0F766E',
     title: 'Gói Cơ bản (Basic)',
-    features: ['Quản lý tối đa 5 tòa nhà', 'Giới hạn 20 phòng mỗi tòa nhà', 'Quét số điện nước tự động bằng AI', 'Tự động đồng bộ báo cước Telegram'],
+    features: ['Quản lý tối đa 5 tòa nhà', 'Giới hạn 20 phòng mỗi tòa nhà', 'Quét số điện nước tự động bằng AI', 'Trợ lý AI: 100 câu hỏi / tháng', 'Tự động đồng bộ báo cước Telegram'],
   },
   pro: {
     color: '#0369A1',
     title: 'Gói Chuyên nghiệp (Pro)',
-    features: ['Không giới hạn số tòa nhà', 'Không giới hạn số phòng trọ', 'Không giới hạn quét số bằng AI', 'Báo cáo doanh thu & VietQR thông minh'],
+    features: ['Không giới hạn số tòa nhà', 'Không giới hạn số phòng trọ', 'Không giới hạn quét số bằng AI', 'Trợ lý AI: Không giới hạn câu hỏi', 'Báo cáo doanh thu & VietQR thông minh'],
   },
 };
 
@@ -30,6 +30,13 @@ const formatAILimit = (plan) => {
   if (plan.maxAICallsPerMonth === -1) return 'Không giới hạn';
   if (plan.maxAICallsPerMonth === 0) return 'Không hỗ trợ';
   return `${plan.maxAICallsPerMonth} lượt / tháng`;
+};
+
+const formatChatLimit = (plan) => {
+  if (!plan) return '20 câu / tháng';
+  if (plan.maxChatCallsPerMonth === -1) return 'Không giới hạn';
+  if (plan.maxChatCallsPerMonth === 0) return 'Không hỗ trợ';
+  return `${plan.maxChatCallsPerMonth ?? (plan.name === 'basic' ? 100 : (plan.name === 'pro' ? 'Không giới hạn' : 20))} câu / tháng`;
 };
 
 const formatLimit = (value, unit, fallback) => {
@@ -480,6 +487,11 @@ const Plans = () => {
                   <span style={{ color: '#CBD5E1' }}>Lượt quét AI:</span>
                   <strong style={{ color: '#5EEAD4' }}>{formatAILimit(currentPlanObj)}</strong>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Bot size={15} color="#94A3B8" aria-hidden="true" />
+                  <span style={{ color: '#CBD5E1' }}>Hỏi đáp AI:</span>
+                  <strong style={{ color: '#5EEAD4' }}>{formatChatLimit(currentPlanObj)}</strong>
+                </div>
               </div>
             </div>
           </Col>
@@ -580,7 +592,11 @@ const Plans = () => {
                     ))}
                     <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                       <Zap size={16} color="#0369A1" style={{ flexShrink: 0, marginTop: 3 }} aria-hidden="true" />
-                      <span>Hạn mức AI: <strong>{formatAILimit(plan)}</strong></span>
+                      <span>Quét chỉ số AI: <strong>{formatAILimit(plan)}</strong></span>
+                    </li>
+                    <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <Bot size={16} color="#0F766E" style={{ flexShrink: 0, marginTop: 3 }} aria-hidden="true" />
+                      <span>Trợ lý AI Chat: <strong>{formatChatLimit(plan)}</strong></span>
                     </li>
                   </ul>
                 </div>

@@ -12,6 +12,11 @@ const Login = () => {
   const navigate = useNavigate();
   const [appealModalVisible, setAppealModalVisible] = useState(false);
   const [appealLoading, setAppealLoading] = useState(false);
+  const [forgotModalVisible, setForgotModalVisible] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotForm] = Form.useForm();
 
   useEffect(() => {
     const flash = sessionStorage.getItem('auth_flash_message');
@@ -123,8 +128,12 @@ const Login = () => {
           <button type="button" className="link-btn danger" onClick={() => setAppealModalVisible(true)}>
             Tài khoản bị khóa?
           </button>
-          {/* ponytail: chưa có API quên mật khẩu, thêm khi backend hỗ trợ */}
-          <button type="button" className="link-btn" onClick={() => message.info('Vui lòng liên hệ quản trị viên để đặt lại mật khẩu.')}>
+          <button type="button" className="link-btn" onClick={() => {
+            setForgotStep(1);
+            setForgotEmail('');
+            forgotForm.resetFields();
+            setForgotModalVisible(true);
+          }}>
             Quên mật khẩu?
           </button>
         </div>
@@ -136,7 +145,7 @@ const Login = () => {
         <div className="auth-switch">
           Chưa có tài khoản?{' '}
           <button type="button" className="link-btn" style={{ fontSize: 14 }} onClick={() => navigate('/register')}>
-            Đăng ký chủ nhà
+            Đăng ký tài khoản
           </button>
         </div>
       </Form>
@@ -211,6 +220,122 @@ const Login = () => {
             <Button type="primary" danger htmlType="submit" loading={appealLoading}>Gửi khiếu nại</Button>
           </div>
         </Form>
+      </Modal>
+
+      {/* Modal Quên mật khẩu / Đặt lại mật khẩu qua Email OTP */}
+      <Modal
+        title="Đặt lại mật khẩu qua Email"
+        open={forgotModalVisible}
+        onCancel={() => setForgotModalVisible(false)}
+        footer={null}
+        width={440}
+        centered
+        destroyOnHidden
+      >
+        {forgotStep === 1 ? (
+          <Form
+            form={forgotForm}
+            layout="vertical"
+            requiredMark={false}
+            style={{ marginTop: 12 }}
+            onFinish={async (values) => {
+              setForgotLoading(true);
+              try {
+                const res = await axiosInstance.post('/auth/forgot-password', { email: values.email });
+                message.success(res.message || 'Mã OTP đã được gửi nếu email tồn tại trong hệ thống.');
+                setForgotEmail(values.email);
+                setForgotStep(2);
+                forgotForm.setFieldsValue({ otp: '', newPassword: '', confirmPassword: '' });
+              } catch (err) {
+                message.error(err.response?.data?.message || 'Không thể gửi yêu cầu đặt lại mật khẩu.');
+              } finally {
+                setForgotLoading(false);
+              }
+            }}
+          >
+            <Form.Item
+              name="email"
+              label="Email đăng ký tài khoản"
+              rules={[
+                { required: true, message: 'Vui lòng nhập email!' },
+                { type: 'email', message: 'Email không đúng định dạng!' }
+              ]}
+            >
+              <Input placeholder="ban@example.com" autoComplete="email" />
+            </Form.Item>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button onClick={() => setForgotModalVisible(false)}>Hủy</Button>
+              <Button type="primary" htmlType="submit" loading={forgotLoading}>Gửi mã OTP</Button>
+            </div>
+          </Form>
+        ) : (
+          <Form
+            form={forgotForm}
+            layout="vertical"
+            requiredMark={false}
+            style={{ marginTop: 12 }}
+            onFinish={async (values) => {
+              setForgotLoading(true);
+              try {
+                const res = await axiosInstance.post('/auth/reset-password', {
+                  email: forgotEmail,
+                  otp: values.otp,
+                  newPassword: values.newPassword,
+                });
+                message.success(res.message || 'Đặt lại mật khẩu thành công!');
+                setForgotModalVisible(false);
+              } catch (err) {
+                message.error(err.response?.data?.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
+              } finally {
+                setForgotLoading(false);
+              }
+            }}
+          >
+            <p style={{ color: '#475569', fontSize: 13, marginBottom: 12 }}>
+              Nhập mã OTP 6 chữ số đã gửi tới <b>{forgotEmail}</b>.
+            </p>
+            <Form.Item
+              name="otp"
+              label="Mã OTP (6 chữ số)"
+              rules={[
+                { required: true, message: 'Vui lòng nhập mã OTP!' },
+                { pattern: /^\d{6}$/, message: 'Mã OTP phải gồm đúng 6 chữ số!' }
+              ]}
+            >
+              <Input placeholder="123456" maxLength={6} />
+            </Form.Item>
+            <Form.Item
+              name="newPassword"
+              label="Mật khẩu mới"
+              rules={[
+                { required: true, message: 'Vui lòng nhập mật khẩu mới!' },
+                { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự!' }
+              ]}
+            >
+              <Input.Password placeholder="Ít nhất 6 ký tự" autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item
+              name="confirmPassword"
+              label="Xác nhận mật khẩu"
+              dependencies={['newPassword']}
+              rules={[
+                { required: true, message: 'Vui lòng xác nhận mật khẩu mới!' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!value || getFieldValue('newPassword') === value) return Promise.resolve();
+                    return Promise.reject(new Error('Mật khẩu xác nhận không khớp!'));
+                  },
+                }),
+              ]}
+            >
+              <Input.Password placeholder="Nhập lại mật khẩu mới" autoComplete="new-password" />
+            </Form.Item>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <Button onClick={() => setForgotStep(1)}>Quay lại</Button>
+              <Button type="primary" htmlType="submit" loading={forgotLoading}>Đặt lại mật khẩu</Button>
+            </div>
+          </Form>
+        )}
       </Modal>
     </AuthLayout>
   );

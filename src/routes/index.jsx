@@ -42,6 +42,10 @@ const TenantContract = React.lazy(() => import('../pages/tenant/Contract'));
 const TenantSupport = React.lazy(() => import('../pages/tenant/Support'));
 const TenantProfile = React.lazy(() => import('../pages/tenant/Profile'));
 
+// Pages - Public Discovery & Booking
+const PublicRooms = React.lazy(() => import('../pages/public/PublicRooms'));
+const PublicRoomDetail = React.lazy(() => import('../pages/public/PublicRoomDetail'));
+
 // Pages - Auth (Dynamic code-splitting)
 const Login = React.lazy(() => import('../pages/Login'));
 const Register = React.lazy(() => import('../pages/Register'));
@@ -111,6 +115,18 @@ const ThemeRoutes = () => {
 
     // --- CÁC TRANG CHUNG ---
     {
+      path: '/',
+      element: withLazy(PublicRooms),
+    },
+    {
+      path: '/rooms',
+      element: withLazy(PublicRooms),
+    },
+    {
+      path: '/rooms/:id',
+      element: withLazy(PublicRoomDetail),
+    },
+    {
       path: '/login',
       element: withLazy(Login),
     },
@@ -119,12 +135,8 @@ const ThemeRoutes = () => {
       element: withLazy(Register),
     },
     {
-      path: '/',
-      element: <Navigate to="/login" />,
-    },
-    {
       path: '*',
-      element: <Navigate to="/login" />,
+      element: <Navigate to="/" replace />,
     },
   ]);
 };

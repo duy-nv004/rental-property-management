@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Row, Col, Card, Select, Spin, message, Alert, Empty } from 'antd';
+import { Row, Col, Card, Select, Spin, message, Alert, Empty, Button } from 'antd';
 import {
   BarChart, Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
 } from 'recharts';
-import { Wallet, TrendingUp, AlertCircle, Lightbulb, CheckCircle2, Wrench, PiggyBank, Home } from 'lucide-react';
+import { Wallet, TrendingUp, AlertCircle, Lightbulb, CheckCircle2, Wrench, PiggyBank, Home, FileSpreadsheet } from 'lucide-react';
 import axiosInstance from '../../utils/axios';
 import PageHeader from '../../components/admin/PageHeader';
+import { buildFinancialCsv, downloadCsvFile } from '../../utils/exportReport';
 
 const BAR_COLORS = ['#94A3B8', '#0F766E', '#DC2626'];
 
@@ -99,6 +100,17 @@ const Financials = () => {
               ]}
             />
             <Select aria-label="Chọn năm" value={selectedYear} style={{ minWidth: 100 }} onChange={setSelectedYear} options={yearOptions} />
+            <Button
+              icon={<FileSpreadsheet size={15} aria-hidden="true" />}
+              disabled={!stats}
+              onClick={() => {
+                const csv = buildFinancialCsv(stats, selectedYear, selectedMonth);
+                const suffix = selectedMonth === 'all' ? `${selectedYear}` : `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+                downloadCsvFile(csv, `bao-cao-tai-chinh-${suffix}.csv`);
+              }}
+            >
+              Xuất Excel
+            </Button>
           </div>
         }
       />
